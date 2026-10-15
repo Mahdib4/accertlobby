@@ -1,0 +1,2826 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 85ca56d5a8163c04d983725e7f118a28, type: 3}
+  m_Name: AccertoneSettingsCatalog
+  m_EditorClassIdentifier: Assembly-CSharp::Accertone.Settings.SettingsCatalog
+  categories:
+  - id: display
+    title: Display
+    blurb: Screen, timing and image calibration.
+    header:
+      key: 
+      label: 
+      kind: 0
+      info: 
+      optionSource: 0
+      options: []
+      ordinal: 0
+      min: 0
+      max: 100
+      step: 1
+      decimals: 0
+      unit: 
+      defaultValue: 0
+      muteKey: 
+      audioChannel: 
+      actionName: 
+      bindingGroup: 
+      locked: 0
+      applies: 0
+      preview: 0
+      gpuCost: 0
+      visualGain: 0
+      disabledWhen: []
+    pages:
+    - id: main
+      label: Display
+      sections:
+      - title: Screen
+        bindingColumns: 0
+        settings:
+        - key: display.monitor
+          label: Display
+          kind: 2
+          info: The monitor the game runs on. Moving to another display asks you to confirm and reverts on its own if you don't.
+          optionSource: 1
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 1
+          preview: 1
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: display.windowMode
+          label: Window mode
+          kind: 1
+          info: Fullscreen gives the game the whole display and lets you choose a refresh rate. Borderless switches to other apps instantly. Windowed runs in a window you can move.
+          optionSource: 0
+          options:
+          - Fullscreen
+          - Borderless
+          - Windowed
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 1
+          preview: 1
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: display.resolution
+          label: Resolution
+          kind: 2
+          info: Size of the game image. To trade sharpness for frame rate while keeping menus crisp, lower Render scale in Graphics instead.
+          optionSource: 2
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 1
+          preview: 1
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: display.refreshRate
+          label: Refresh rate
+          kind: 0
+          info: How many times per second the display updates. Match it to your monitor for the smoothest image.
+          optionSource: 3
+          options: []
+          ordinal: 1
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 1
+          preview: 1
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen:
+          - key: display.windowMode
+            op: 1
+            value: 0
+            reason: Borderless and Windowed use your desktop refresh rate.
+      - title: Sync & frame rate
+        bindingColumns: 0
+        settings:
+        - key: display.vsync
+          label: V-Sync
+          kind: 3
+          info: Synchronises frames with the display to remove tearing. Adds a little input delay.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 1
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: display.frameRateLimit
+          label: Frame-rate limit
+          kind: 0
+          info: Caps the frame rate to keep your GPU cooler and frame pacing even. Unlimited renders as fast as possible.
+          optionSource: 0
+          options:
+          - 30
+          - 60
+          - 120
+          - 144
+          - 165
+          - 240
+          - Unlimited
+          ordinal: 1
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 3
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 1
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen:
+          - key: display.vsync
+            op: 0
+            value: 1
+            reason: V-Sync caps the frame rate at your refresh rate.
+      - title: Image
+        bindingColumns: 0
+        settings:
+        - key: display.brightness
+          label: Brightness
+          kind: 4
+          info: Raise or lower until the left mark below is only just visible against black.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 50
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 2
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: display.gamma
+          label: Gamma
+          kind: 4
+          info: Shapes mid-tones. Lower values lift shadows; higher values deepen them. 2.2 matches most displays.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 1.8
+          max: 2.6
+          step: 0.05
+          decimals: 2
+          unit: 
+          defaultValue: 2.2
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 2
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: display.interfaceScale
+          label: Interface scale
+          kind: 4
+          info: Size of menus and on-screen text. It takes effect when you apply. The race HUD has its own scale under Interface.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 80
+          max: 120
+          step: 5
+          decimals: 0
+          unit: '%'
+          defaultValue: 100
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 3
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+  - id: graphics
+    title: Graphics
+    blurb: Image quality and performance.
+    header:
+      key: graphics.preset
+      label: Quality preset
+      kind: 1
+      info: Sets every option below at once. Changing any single option switches the preset to Custom.
+      optionSource: 0
+      options:
+      - Low
+      - Medium
+      - High
+      - Ultra
+      - Custom
+      ordinal: 0
+      min: 0
+      max: 100
+      step: 1
+      decimals: 0
+      unit: 
+      defaultValue: 2
+      muteKey: 
+      audioChannel: 
+      actionName: 
+      bindingGroup: 
+      locked: 0
+      applies: 0
+      preview: 4
+      gpuCost: 0
+      visualGain: 0
+      disabledWhen: []
+    pages:
+    - id: main
+      label: Graphics
+      sections:
+      - title: Resolution & anti-aliasing
+        bindingColumns: 0
+        settings:
+        - key: graphics.renderScale
+          label: Render scale
+          kind: 4
+          info: Resolution of the 3D image relative to the screen. Menus and text always stay sharp.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 50
+          max: 200
+          step: 5
+          decimals: 0
+          unit: '%'
+          defaultValue: 100
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 4
+          gpuCost: 5
+          visualGain: 4
+          disabledWhen: []
+        - key: graphics.upscaling
+          label: Upscaling
+          kind: 0
+          info: How the 3D image is enlarged when Render scale is below 100%. STP gives the cleanest result; FSR is lighter.
+          optionSource: 0
+          options:
+          - Bilinear
+          - FSR 1.0
+          - STP
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 4
+          gpuCost: 1
+          visualGain: 3
+          disabledWhen:
+          - key: graphics.renderScale
+            op: 3
+            value: 100
+            reason: Only used when Render scale is below 100%.
+        - key: graphics.antiAliasing
+          label: Anti-aliasing
+          kind: 0
+          info: Smooths jagged edges. SMAA is sharp and cheap, TAA is smoothest in motion, MSAA is the most accurate on geometry.
+          optionSource: 0
+          options:
+          - Off
+          - FXAA
+          - SMAA
+          - TAA
+          - "MSAA 2\xD7"
+          - "MSAA 4\xD7"
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 2
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 4
+          gpuCost: 3
+          visualGain: 4
+          disabledWhen: []
+      - title: Textures
+        bindingColumns: 0
+        settings:
+        - key: graphics.textureQuality
+          label: Texture quality
+          kind: 0
+          info: Resolution of surfaces and liveries. Lower settings use less video memory.
+          optionSource: 0
+          options:
+          - Quarter
+          - Half
+          - Full
+          ordinal: 1
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 2
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 4
+          gpuCost: 2
+          visualGain: 5
+          disabledWhen: []
+        - key: graphics.anisotropic
+          label: Anisotropic filtering
+          kind: 0
+          info: Keeps the track surface and kerbs sharp at grazing angles.
+          optionSource: 0
+          options:
+          - Off
+          - "2\xD7"
+          - "4\xD7"
+          - "8\xD7"
+          - "16\xD7"
+          ordinal: 1
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 4
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 4
+          gpuCost: 1
+          visualGain: 3
+          disabledWhen: []
+      - title: Lighting & shadows
+        bindingColumns: 0
+        settings:
+        - key: graphics.shadows
+          label: Shadow quality
+          kind: 0
+          info: Shadow resolution, distance and softness.
+          optionSource: 0
+          options:
+          - Off
+          - Low
+          - Medium
+          - High
+          - Ultra
+          ordinal: 1
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 3
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 4
+          gpuCost: 5
+          visualGain: 5
+          disabledWhen: []
+        - key: graphics.lighting
+          label: Lighting quality
+          kind: 0
+          info: How many lights shade each object and whether they cast shadows.
+          optionSource: 0
+          options:
+          - Low
+          - Medium
+          - High
+          ordinal: 1
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 2
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 4
+          gpuCost: 3
+          visualGain: 3
+          disabledWhen: []
+        - key: graphics.ambientOcclusion
+          label: Ambient occlusion
+          kind: 0
+          info: Soft contact shadows where surfaces meet, such as under the car and inside the cockpit.
+          optionSource: 0
+          options:
+          - Off
+          - Low
+          - High
+          ordinal: 1
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 2
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 4
+          gpuCost: 3
+          visualGain: 3
+          disabledWhen: []
+        - key: graphics.reflections
+          label: Reflections
+          kind: 0
+          info: Floor reflections and reflection quality in the showroom and garage.
+          optionSource: 0
+          options:
+          - Low
+          - Medium
+          - High
+          ordinal: 1
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 2
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 4
+          gpuCost: 3
+          visualGain: 4
+          disabledWhen: []
+      - title: Post-processing
+        bindingColumns: 0
+        settings:
+        - key: graphics.postProcessing
+          label: Post-processing
+          kind: 3
+          info: Master switch for the effects below. The showroom's colour grade always stays on.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 4
+          gpuCost: 2
+          visualGain: 4
+          disabledWhen: []
+        - key: graphics.bloom
+          label: Bloom
+          kind: 3
+          info: Glow around bright lights and LED strips.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 4
+          gpuCost: 1
+          visualGain: 3
+          disabledWhen:
+          - key: graphics.postProcessing
+            op: 0
+            value: 0
+            reason: Turn on Post-processing to use this.
+        - key: graphics.motionBlur
+          label: Motion blur
+          kind: 0
+          info: Blur from camera movement at speed.
+          optionSource: 0
+          options:
+          - Off
+          - Low
+          - High
+          ordinal: 1
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 4
+          gpuCost: 1
+          visualGain: 2
+          disabledWhen:
+          - key: graphics.postProcessing
+            op: 0
+            value: 0
+            reason: Turn on Post-processing to use this.
+        - key: graphics.depthOfField
+          label: Depth of field
+          kind: 3
+          info: Focus blur in replays and photo mode.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 4
+          gpuCost: 2
+          visualGain: 2
+          disabledWhen:
+          - key: graphics.postProcessing
+            op: 0
+            value: 0
+            reason: Turn on Post-processing to use this.
+        - key: graphics.filmGrain
+          label: Film grain
+          kind: 3
+          info: Subtle grain that softens banding in dark areas.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 4
+          gpuCost: 1
+          visualGain: 1
+          disabledWhen:
+          - key: graphics.postProcessing
+            op: 0
+            value: 0
+            reason: Turn on Post-processing to use this.
+  - id: audio
+    title: Audio
+    blurb: Mix, mute and output.
+    header:
+      key: 
+      label: 
+      kind: 0
+      info: 
+      optionSource: 0
+      options: []
+      ordinal: 0
+      min: 0
+      max: 100
+      step: 1
+      decimals: 0
+      unit: 
+      defaultValue: 0
+      muteKey: 
+      audioChannel: 
+      actionName: 
+      bindingGroup: 
+      locked: 0
+      applies: 0
+      preview: 0
+      gpuCost: 0
+      visualGain: 0
+      disabledWhen: []
+    pages:
+    - id: main
+      label: Audio
+      sections:
+      - title: Mix
+        bindingColumns: 0
+        settings:
+        - key: audio.master
+          label: Master
+          kind: 4
+          info: Overall volume. Press Enter to play a test sound.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: '%'
+          defaultValue: 85
+          muteKey: audio.master.mute
+          audioChannel: Master
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 5
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: audio.music
+          label: Music
+          kind: 4
+          info: Menu and replay music.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: '%'
+          defaultValue: 65
+          muteKey: audio.music.mute
+          audioChannel: Music
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 5
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: audio.effects
+          label: Effects
+          kind: 4
+          info: Tyres, impacts, gear shifts and pit equipment.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: '%'
+          defaultValue: 80
+          muteKey: audio.effects.mute
+          audioChannel: Effects
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 5
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: audio.engine
+          label: Engine
+          kind: 4
+          info: Your power unit and other cars.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: '%'
+          defaultValue: 90
+          muteKey: audio.engine.mute
+          audioChannel: Engine
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 5
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: audio.environment
+          label: Environment
+          kind: 4
+          info: Crowd, wind, rain and the showroom ambience.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: '%'
+          defaultValue: 70
+          muteKey: audio.environment.mute
+          audioChannel: Environment
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 5
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: audio.interface
+          label: Interface
+          kind: 4
+          info: Menu clicks and confirmations, like the ticks you hear moving through this screen.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: '%'
+          defaultValue: 60
+          muteKey: audio.interface.mute
+          audioChannel: Interface
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 5
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: audio.voice
+          label: Voice chat
+          kind: 4
+          info: Other players in online sessions.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: '%'
+          defaultValue: 85
+          muteKey: audio.voice.mute
+          audioChannel: Voice
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 3
+          preview: 5
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+      - title: Output
+        bindingColumns: 0
+        settings:
+        - key: audio.speakerMode
+          label: Speaker setup
+          kind: 0
+          info: Match your speakers or headphones. Changing it restarts audio for a moment when you apply.
+          optionSource: 0
+          options:
+          - Stereo
+          - Quad
+          - 5.1 Surround
+          - 7.1 Surround
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 5
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: audio.muteInBackground
+          label: Mute in background
+          kind: 3
+          info: Silences the game while you are in another window.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 5
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+  - id: controls
+    title: Controls
+    blurb: Bindings, steering and feedback.
+    header:
+      key: controls.device
+      label: Device
+      kind: 7
+      info: Switch between keyboard and controller settings.
+      optionSource: 0
+      options:
+      - Keyboard & mouse
+      - Controller
+      ordinal: 0
+      min: 0
+      max: 100
+      step: 1
+      decimals: 0
+      unit: 
+      defaultValue: 0
+      muteKey: 
+      audioChannel: 
+      actionName: 
+      bindingGroup: 
+      locked: 0
+      applies: 0
+      preview: 0
+      gpuCost: 0
+      visualGain: 0
+      disabledWhen: []
+    pages:
+    - id: kbm
+      label: Keyboard & mouse
+      sections:
+      - title: Driving
+        bindingColumns: 1
+        settings:
+        - key: bind.kb.Throttle
+          label: Accelerate
+          kind: 5
+          info: Throttle. Keyboard pedals ramp in quickly; adjust the response below.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: Throttle
+          bindingGroup: Keyboard&Mouse
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.kb.Brake
+          label: Brake
+          kind: 5
+          info: Brake pedal.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: Brake
+          bindingGroup: Keyboard&Mouse
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.kb.SteerLeft
+          label: Steer left
+          kind: 5
+          info: Steer left. Keyboard steering eases toward full lock at the speed set below.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: SteerLeft
+          bindingGroup: Keyboard&Mouse
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.kb.SteerRight
+          label: Steer right
+          kind: 5
+          info: Steer right.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: SteerRight
+          bindingGroup: Keyboard&Mouse
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.kb.ShiftUp
+          label: Shift up
+          kind: 5
+          info: Next gear (manual gearbox).
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: ShiftUp
+          bindingGroup: Keyboard&Mouse
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.kb.ShiftDown
+          label: Shift down
+          kind: 5
+          info: Previous gear (manual gearbox).
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: ShiftDown
+          bindingGroup: Keyboard&Mouse
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.kb.Drs
+          label: DRS / overtake
+          kind: 5
+          info: Opens the rear wing in DRS zones.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: Drs
+          bindingGroup: Keyboard&Mouse
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.kb.LookBack
+          label: Look back
+          kind: 5
+          info: Rear view while held.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: LookBack
+          bindingGroup: Keyboard&Mouse
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.kb.ChangeCamera
+          label: Change camera
+          kind: 5
+          info: Cycles the driving cameras.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: ChangeCamera
+          bindingGroup: Keyboard&Mouse
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.kb.PitLimiter
+          label: Pit limiter
+          kind: 5
+          info: Limits speed in the pit lane.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: PitLimiter
+          bindingGroup: Keyboard&Mouse
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.kb.Pause
+          label: Pause
+          kind: 5
+          info: Pause is always on Esc so you can't lock yourself out.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: Pause
+          bindingGroup: Keyboard&Mouse
+          locked: 1
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+      - title: Response
+        bindingColumns: 0
+        settings:
+        - key: controls.kb.steerSpeed
+          label: Keyboard steering speed
+          kind: 4
+          info: How quickly a held steering key reaches full lock.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 1
+          max: 10
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 6
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: controls.kb.steerSensitivity
+          label: Steering sensitivity
+          kind: 4
+          info: Overall steering response. Above 100% reaches full lock sooner.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 50
+          max: 150
+          step: 5
+          decimals: 0
+          unit: '%'
+          defaultValue: 100
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: controls.kb.steerLinearity
+          label: Steering linearity
+          kind: 4
+          info: 0% is linear. Higher values soften the centre for small corrections at speed.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 5
+          decimals: 0
+          unit: '%'
+          defaultValue: 30
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: controls.kb.throttleSensitivity
+          label: Throttle sensitivity
+          kind: 4
+          info: How hard a key press applies throttle.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 50
+          max: 150
+          step: 5
+          decimals: 0
+          unit: '%'
+          defaultValue: 100
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: controls.kb.brakeSensitivity
+          label: Brake sensitivity
+          kind: 4
+          info: How hard a key press applies the brake.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 50
+          max: 150
+          step: 5
+          decimals: 0
+          unit: '%'
+          defaultValue: 100
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+    - id: pad
+      label: Controller
+      sections:
+      - title: Driving
+        bindingColumns: 1
+        settings:
+        - key: controls.pad.steerStick
+          label: Steering
+          kind: 0
+          info: Which stick steers the car.
+          optionSource: 0
+          options:
+          - Left stick
+          - Right stick
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.pad.Throttle
+          label: Accelerate
+          kind: 5
+          info: Throttle trigger.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: Throttle
+          bindingGroup: Gamepad
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.pad.Brake
+          label: Brake
+          kind: 5
+          info: Brake trigger.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: Brake
+          bindingGroup: Gamepad
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.pad.ShiftUp
+          label: Shift up
+          kind: 5
+          info: Next gear.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: ShiftUp
+          bindingGroup: Gamepad
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.pad.ShiftDown
+          label: Shift down
+          kind: 5
+          info: Previous gear.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: ShiftDown
+          bindingGroup: Gamepad
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.pad.Drs
+          label: DRS / overtake
+          kind: 5
+          info: Opens the rear wing in DRS zones.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: Drs
+          bindingGroup: Gamepad
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.pad.LookBack
+          label: Look back
+          kind: 5
+          info: Rear view while held.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: LookBack
+          bindingGroup: Gamepad
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.pad.ChangeCamera
+          label: Change camera
+          kind: 5
+          info: Cycles the driving cameras.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: ChangeCamera
+          bindingGroup: Gamepad
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.pad.PitLimiter
+          label: Pit limiter
+          kind: 5
+          info: Limits speed in the pit lane.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: PitLimiter
+          bindingGroup: Gamepad
+          locked: 0
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: bind.pad.Pause
+          label: Pause
+          kind: 5
+          info: Pause is always on the Menu button.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: Pause
+          bindingGroup: Gamepad
+          locked: 1
+          applies: 0
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+      - title: Response
+        bindingColumns: 0
+        settings:
+        - key: controls.pad.steerSensitivity
+          label: Steering sensitivity
+          kind: 4
+          info: Overall steering response.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 50
+          max: 150
+          step: 5
+          decimals: 0
+          unit: '%'
+          defaultValue: 100
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: controls.pad.steerDeadzone
+          label: Steering deadzone
+          kind: 4
+          info: Stick travel ignored around the centre. Raise it if the car drifts with the stick released.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 30
+          step: 1
+          decimals: 0
+          unit: '%'
+          defaultValue: 8
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: controls.pad.steerLinearity
+          label: Steering linearity
+          kind: 4
+          info: 0% is linear. Higher values give finer control near the centre.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 5
+          decimals: 0
+          unit: '%'
+          defaultValue: 40
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: controls.pad.triggerDeadzone
+          label: Trigger deadzone
+          kind: 4
+          info: Trigger travel ignored before the pedal starts to move.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 30
+          step: 1
+          decimals: 0
+          unit: '%'
+          defaultValue: 5
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 6
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+      - title: Feedback
+        bindingColumns: 0
+        settings:
+        - key: controls.pad.vibration
+          label: Vibration
+          kind: 3
+          info: Rumble from kerbs, wheel slip and gear shifts.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 7
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: controls.pad.vibrationIntensity
+          label: Vibration intensity
+          kind: 4
+          info: Strength of all rumble effects.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 5
+          decimals: 0
+          unit: '%'
+          defaultValue: 70
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 7
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen:
+          - key: controls.pad.vibration
+            op: 0
+            value: 0
+            reason: Vibration is off.
+        - key: controls.pad.testVibration
+          label: Test vibration
+          kind: 6
+          info: Plays a short rumble on the connected controller at the current intensity.
+          optionSource: 0
+          options:
+          - Test
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 7
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen:
+          - key: controls.pad.vibration
+            op: 0
+            value: 0
+            reason: Vibration is off.
+  - id: gameplay
+    title: Gameplay
+    blurb: Assists, rules and opponents. These apply from your next session on track.
+    header:
+      key: gameplay.assistPreset
+      label: Assist preset
+      kind: 1
+      info: Sets all driving assists at once. Changing one assist switches to Custom.
+      optionSource: 0
+      options:
+      - Off
+      - Medium
+      - Full
+      - Custom
+      ordinal: 0
+      min: 0
+      max: 100
+      step: 1
+      decimals: 0
+      unit: 
+      defaultValue: 1
+      muteKey: 
+      audioChannel: 
+      actionName: 
+      bindingGroup: 
+      locked: 0
+      applies: 2
+      preview: 8
+      gpuCost: 0
+      visualGain: 0
+      disabledWhen: []
+    pages:
+    - id: main
+      label: Gameplay
+      sections:
+      - title: Driving assists
+        bindingColumns: 0
+        settings:
+        - key: gameplay.tractionControl
+          label: Traction control
+          kind: 0
+          info: Limits wheelspin under power.
+          optionSource: 0
+          options:
+          - Off
+          - Medium
+          - Full
+          ordinal: 1
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 8
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: gameplay.abs
+          label: Anti-lock brakes
+          kind: 3
+          info: Stops the wheels locking under heavy braking.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 8
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: gameplay.brakingAssist
+          label: Braking assist
+          kind: 0
+          info: Brakes for you before corners.
+          optionSource: 0
+          options:
+          - Off
+          - Low
+          - Medium
+          - High
+          ordinal: 1
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 8
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: gameplay.steeringAssist
+          label: Steering assist
+          kind: 3
+          info: Gently steers toward the racing line.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 8
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: gameplay.racingLine
+          label: Racing line
+          kind: 0
+          info: Shows the ideal line, coloured by when to brake.
+          optionSource: 0
+          options:
+          - Off
+          - Corners only
+          - Full
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 8
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: gameplay.gearbox
+          label: Gearbox
+          kind: 1
+          info: Manual uses the Shift up and Shift down bindings.
+          optionSource: 0
+          options:
+          - Automatic
+          - Manual
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 8
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: gameplay.pitAssist
+          label: Pit assist
+          kind: 3
+          info: Handles the pit entry speed limit and box stop.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 8
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+      - title: Simulation
+        bindingColumns: 0
+        settings:
+        - key: gameplay.damage
+          label: Car damage
+          kind: 0
+          info: How collisions affect the car's handling and parts.
+          optionSource: 0
+          options:
+          - Off
+          - Simplified
+          - Full
+          ordinal: 1
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 8
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: gameplay.aiDifficulty
+          label: AI difficulty
+          kind: 4
+          info: Pace of the other drivers. 100 matches the fastest real-world laps.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 110
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 70
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 8
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: gameplay.tyreWear
+          label: Tyre wear
+          kind: 3
+          info: Tyres lose grip as they wear.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 8
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: gameplay.fuelUsage
+          label: Fuel usage
+          kind: 3
+          info: Fuel burns over the race and the car gets lighter.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 8
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: gameplay.rules
+          label: Rules & flags
+          kind: 0
+          info: Track limits, penalties and flag rules.
+          optionSource: 0
+          options:
+          - Off
+          - Reduced
+          - Full
+          ordinal: 1
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 2
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 8
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+  - id: camera
+    title: Camera
+    blurb: Views on track and in the showroom.
+    header:
+      key: 
+      label: 
+      kind: 0
+      info: 
+      optionSource: 0
+      options: []
+      ordinal: 0
+      min: 0
+      max: 100
+      step: 1
+      decimals: 0
+      unit: 
+      defaultValue: 0
+      muteKey: 
+      audioChannel: 
+      actionName: 
+      bindingGroup: 
+      locked: 0
+      applies: 0
+      preview: 0
+      gpuCost: 0
+      visualGain: 0
+      disabledWhen: []
+    pages:
+    - id: main
+      label: Camera
+      sections:
+      - title: Default view
+        bindingColumns: 0
+        settings:
+        - key: camera.startView
+          label: Starting camera
+          kind: 0
+          info: The view you start each session in. Change camera switches views while driving.
+          optionSource: 0
+          options:
+          - Cockpit
+          - T-cam
+          - Nose
+          - Chase near
+          - Chase far
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 3
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 9
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+      - title: Cockpit
+        bindingColumns: 0
+        settings:
+        - key: camera.cockpitFov
+          label: Field of view
+          kind: 4
+          info: Wider shows more of the track; narrower makes the car feel bigger and the speed lower.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 60
+          max: 110
+          step: 1
+          decimals: 0
+          unit: "\xB0"
+          defaultValue: 77
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 9
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: camera.headMovement
+          label: Head movement
+          kind: 4
+          info: How much the driver's head moves under braking, cornering and kerbs.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 5
+          decimals: 0
+          unit: '%'
+          defaultValue: 50
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 9
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+      - title: Chase
+        bindingColumns: 0
+        settings:
+        - key: camera.chaseDistance
+          label: Distance
+          kind: 4
+          info: How far behind the car the camera sits.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 5
+          decimals: 0
+          unit: '%'
+          defaultValue: 50
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 10
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: camera.chaseHeight
+          label: Height
+          kind: 4
+          info: How high above the car the camera sits.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 5
+          decimals: 0
+          unit: '%'
+          defaultValue: 40
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 10
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: camera.chaseFov
+          label: Field of view
+          kind: 4
+          info: Lens width of the chase cameras.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 50
+          max: 100
+          step: 1
+          decimals: 0
+          unit: "\xB0"
+          defaultValue: 70
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 10
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+      - title: Motion
+        bindingColumns: 0
+        settings:
+        - key: camera.shake
+          label: Camera shake
+          kind: 4
+          info: Vibration from kerbs, bumps and engine. Lower it if motion makes you uncomfortable.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 5
+          decimals: 0
+          unit: '%'
+          defaultValue: 60
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 11
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: camera.speedEffect
+          label: Speed effect
+          kind: 3
+          info: Widens the view slightly at high speed.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 9
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: camera.lookSensitivity
+          label: Look sensitivity
+          kind: 4
+          info: Free-look speed with the mouse or right stick.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 10
+          max: 200
+          step: 5
+          decimals: 0
+          unit: '%'
+          defaultValue: 100
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 9
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: camera.showroomMotion
+          label: Showroom camera motion
+          kind: 3
+          info: The lobby camera's slow drift and its follow of your mouse. Turn it off for a completely still showroom.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 12
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+  - id: interface
+    title: Interface
+    blurb: HUD, messages and menus.
+    header:
+      key: 
+      label: 
+      kind: 0
+      info: 
+      optionSource: 0
+      options: []
+      ordinal: 0
+      min: 0
+      max: 100
+      step: 1
+      decimals: 0
+      unit: 
+      defaultValue: 0
+      muteKey: 
+      audioChannel: 
+      actionName: 
+      bindingGroup: 
+      locked: 0
+      applies: 0
+      preview: 0
+      gpuCost: 0
+      visualGain: 0
+      disabledWhen: []
+    pages:
+    - id: main
+      label: Interface
+      sections:
+      - title: HUD
+        bindingColumns: 0
+        settings:
+        - key: interface.hud
+          label: Show HUD
+          kind: 3
+          info: All on-track displays. Off hides everything for screenshots and replays.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 13
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: interface.hudScale
+          label: HUD scale
+          kind: 4
+          info: Size of the on-track displays.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 60
+          max: 120
+          step: 5
+          decimals: 0
+          unit: '%'
+          defaultValue: 100
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 13
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen:
+          - key: interface.hud
+            op: 0
+            value: 0
+            reason: The HUD is hidden.
+        - key: interface.speedUnits
+          label: Speed units
+          kind: 1
+          info: Used everywhere speed or distance appears, including the track length in the lobby.
+          optionSource: 0
+          options:
+          - km/h
+          - mph
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 13
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: interface.speedometer
+          label: Speedometer
+          kind: 0
+          info: How speed and revs are shown.
+          optionSource: 0
+          options:
+          - Digital
+          - Dial
+          - Dial + digital
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 2
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 13
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen:
+          - key: interface.hud
+            op: 0
+            value: 0
+            reason: The HUD is hidden.
+        - key: interface.telemetry
+          label: Telemetry
+          kind: 3
+          info: Throttle and brake traces beside the speedometer.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 13
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen:
+          - key: interface.hud
+            op: 0
+            value: 0
+            reason: The HUD is hidden.
+        - key: interface.positionLap
+          label: Position & lap
+          kind: 3
+          info: Race position and lap counter.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 13
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen:
+          - key: interface.hud
+            op: 0
+            value: 0
+            reason: The HUD is hidden.
+        - key: interface.trackMap
+          label: Track map
+          kind: 3
+          info: Mini map with the positions of nearby cars.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 13
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen:
+          - key: interface.hud
+            op: 0
+            value: 0
+            reason: The HUD is hidden.
+      - title: Messages
+        bindingColumns: 0
+        settings:
+        - key: interface.notifications
+          label: Notifications
+          kind: 3
+          info: "Short messages such as \u201CSettings applied\u201D and race-control updates."
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 13
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: interface.subtitles
+          label: Subtitles
+          kind: 3
+          info: Text for team radio and race engineer calls.
+          optionSource: 0
+          options: []
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 13
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+        - key: interface.subtitleSize
+          label: Subtitle size
+          kind: 0
+          info: Size of subtitle text.
+          optionSource: 0
+          options:
+          - Small
+          - Medium
+          - Large
+          ordinal: 1
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 1
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 2
+          preview: 13
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen:
+          - key: interface.subtitles
+            op: 0
+            value: 0
+            reason: Subtitles are off.
+      - title: Menus
+        bindingColumns: 0
+        settings:
+        - key: interface.animations
+          label: Interface animations
+          kind: 0
+          info: Menu transitions and lobby reveals. Reduced keeps them short; Off switches instantly.
+          optionSource: 0
+          options:
+          - Full
+          - Reduced
+          - Off
+          ordinal: 0
+          min: 0
+          max: 100
+          step: 1
+          decimals: 0
+          unit: 
+          defaultValue: 0
+          muteKey: 
+          audioChannel: 
+          actionName: 
+          bindingGroup: 
+          locked: 0
+          applies: 0
+          preview: 14
+          gpuCost: 0
+          visualGain: 0
+          disabledWhen: []
+  presets:
+  - presetKey: graphics.preset
+    keys:
+    - graphics.renderScale
+    - graphics.upscaling
+    - graphics.antiAliasing
+    - graphics.textureQuality
+    - graphics.anisotropic
+    - graphics.shadows
+    - graphics.lighting
+    - graphics.ambientOcclusion
+    - graphics.reflections
+    - graphics.postProcessing
+    - graphics.bloom
+    - graphics.motionBlur
+    - graphics.depthOfField
+    - graphics.filmGrain
+    levels:
+    - values:
+      - 75
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      - 0
+      - 0
+      - 0
+      - 1
+      - 1
+      - 0
+      - 0
+      - 0
+    - values:
+      - 90
+      - 1
+      - 2
+      - 2
+      - 2
+      - 2
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      - 0
+      - 1
+    - values:
+      - 100
+      - 1
+      - 2
+      - 2
+      - 4
+      - 3
+      - 2
+      - 2
+      - 2
+      - 1
+      - 1
+      - 1
+      - 0
+      - 1
+    - values:
+      - 100
+      - 2
+      - 3
+      - 2
+      - 4
+      - 4
+      - 2
+      - 2
+      - 2
+      - 1
+      - 1
+      - 2
+      - 1
+      - 1
+  - presetKey: gameplay.assistPreset
+    keys:
+    - gameplay.tractionControl
+    - gameplay.abs
+    - gameplay.brakingAssist
+    - gameplay.steeringAssist
+    - gameplay.racingLine
+    - gameplay.gearbox
+    - gameplay.pitAssist
+    levels:
+    - values:
+      - 0
+      - 0
+      - 0
+      - 0
+      - 0
+      - 1
+      - 0
+    - values:
+      - 1
+      - 1
+      - 0
+      - 0
+      - 1
+      - 0
+      - 1
+    - values:
+      - 2
+      - 1
+      - 3
+      - 1
+      - 2
+      - 0
+      - 1
