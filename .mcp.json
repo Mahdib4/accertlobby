@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "unity-editor": {
+      "type": "http",
+      "url": "https://c65bc1ab957644.lhr.life/mcp"
+    }
+  }
+}
