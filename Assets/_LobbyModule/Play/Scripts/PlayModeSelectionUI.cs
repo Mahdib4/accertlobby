@@ -1,10 +1,15 @@
 using System;
 using System.Collections.Generic;
 using Accertone.Branding;
+using Accertone.Settings;
 using Accertone.UI;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 namespace Accertone.Play
 {
@@ -16,6 +21,12 @@ namespace Accertone.Play
     /// 3. Career
     /// 4. Hot Lap
     /// 5. Free Practice
+    ///
+    /// The selection screen shows the five modes as one row of identical, art-directed cards
+    /// (<see cref="PlayModeCard"/>) over a dark graphite stage lit by slow violet accents. It shares the
+    /// Settings screen's 1920×1080 design frame, header and key-prompt footer, keeps the lobby wordmark and
+    /// navigation above it, and animates every change of state: screen fade, staggered card entrance,
+    /// hover focus with neighbour dimming, confirm, and the hand-over to each mode's sub-panel.
     /// </summary>
     public class PlayModeSelectionUI : MonoBehaviour
     {
@@ -24,10 +35,38 @@ namespace Accertone.Play
         public Action OnCloseRequested;
         public Action OnOpenCarSetupRequested;
 
+        // Design frame (same 1920×1080 reference and margins as the Settings screen).
+        const float SideMargin = 112f;
+        const float HeaderTop = 170f;
+        const float RowTop = 300f;
+        const float RowBottomMargin = 128f;
+        const float FooterBottom = 42f;
+        const float CardAspect = 0.6f;        // width / height at 16:9; identical for all five cards
+        const float MinCardAspect = 0.5f;     // taller screens (4:3, 16:10) grow the cards vertically
+        const float MaxCardAspect = 0.78f;    // short, wide screens (21:9, 32:9) widen them instead
+        const float CardGap = 22f;
+        const float SubPanelTop = 290f;
+        const float SubPanelBottomMargin = 112f;
+        const float SubPanelWidth = 1608f;
+        const float SubPanelHeight = 680f;
+        const string DefaultTitle = "SELECT MODE";
+        const string DefaultBreadcrumb = "2026 FIA FORMULA ONE SEASON  ·  SELECT RACING DISCIPLINE";
+
         private CanvasGroup m_CanvasGroup;
+        private RectTransform m_Root;
         private RectTransform m_HeaderRt;
         private RectTransform m_CardsContainer;
         private RectTransform m_SubPanelContainer;
+        private CanvasGroup m_CardsGroup;
+        private CanvasGroup m_SubGroup;
+        private CanvasGroup m_HeaderGroup;
+        private CanvasGroup m_TitleGroup;
+        private RectTransform m_TitleBlock;
+        private RectTransform m_FooterRt;
+        private CanvasGroup m_FooterGroup;
+        private CanvasGroup m_GridPromptsGroup;
+        private RectTransform m_Prompts;
+        private bool m_PromptsBuilt;
 
         // Sprites for 5 modes
         [SerializeField] private Sprite m_QuickMatchSprite;
@@ -40,14 +79,63 @@ namespace Accertone.Play
         private bool m_IsInSubPanel = false;
         private readonly List<PlayModeCard> m_Cards = new List<PlayModeCard>();
 
+        // Header / footer text
+        private TMP_Text m_TitleText;
+        private TMP_Text m_BreadcrumbText;
+        private TMP_Text m_CounterText;
+        private TMP_Text m_CounterName;
+        private TMP_Text m_BackLabel;
+        private Button m_BackButton;
+
         // Sub-panel UI references
         private GameObject m_CurrentSubPanelGo;
-        private TMP_Text m_BreadcrumbText;
 
-        public bool IsOpen => gameObject.activeSelf && m_CanvasGroup != null && m_CanvasGroup.alpha > 0.05f;
+        // Stage lighting
+        private RectTransform m_Ambient;
+        private RawImage m_GlowWide;
+        private RawImage m_GlowHigh;
+        private RawImage m_Spot;
+        private PlayGradient m_FloorLine;
+        private AccertoneShape m_FloorAccent;
+        private PlaySpring m_SpotX, m_SpotAlpha, m_ParallaxX, m_ParallaxY;
+        private Vector2 m_RowCenter;
+        private Vector2 m_CardSize;
+        private float m_RowWidth;
+
+        // Flow
+        private enum Flow { Idle, Confirming, GridOut, SubOut }
+        private Flow m_Flow = Flow.Idle;
+        private float m_FlowTime;
+        private PlayModeType m_PendingMode;
+        private int m_ConfirmIndex;
+        private bool m_Open;
+        private bool m_Closing;
+        private PlayTween m_ScreenFade;
+        private PlayTween m_HeaderReveal;
+        private PlayTween m_FooterReveal;
+        private PlayTween m_TitleReveal;
+        private PlayTween m_SubReveal;
+        private float m_InputReadyTime;
+        private Vector2 m_LastRootSize;
+        private Vector2 m_SubHome;
+
+        // Focus
+        private PlayModeCard m_Active;
+        private float m_LastActiveTime = -10f;
+        private int m_LastIndex;
+        private bool m_SelectingFromPointer;
+
+        public bool IsOpen => gameObject.activeSelf && m_Open;
         public bool IsInSubPanel => m_IsInSubPanel;
 
+        /// <summary>The card currently in focus (hovered or selected with keys / pad), if any.</summary>
+        public PlayModeCard ActiveCard => m_Active;
+
+        /// <summary>True while a card has focus, with a short grace so gliding between cards never flickers.</summary>
+        public bool FocusActive => m_Active != null || PlayMotion.Now - m_LastActiveTime < 0.16f;
+
         private bool m_Initialized = false;
+        private bool m_Built = false;
 
         public void InitializeIfNeeded()
         {
@@ -56,6 +144,10 @@ namespace Accertone.Play
             Instance = this;
             m_CanvasGroup = gameObject.GetComponent<CanvasGroup>();
             if (m_CanvasGroup == null) m_CanvasGroup = gameObject.AddComponent<CanvasGroup>();
+
+            // The screen batches on its own canvas so card motion never re-batches the lobby.
+            if (gameObject.GetComponent<Canvas>() == null) gameObject.AddComponent<Canvas>();
+            if (gameObject.GetComponent<GraphicRaycaster>() == null) gameObject.AddComponent<GraphicRaycaster>();
 
             LoadSpritesIfNeeded();
             BuildUIHierarchy();
@@ -82,125 +174,260 @@ namespace Accertone.Play
 #endif
         }
 
+        // =========================================================================
+        // BUILD
+        // =========================================================================
         private void BuildUIHierarchy()
         {
-            var rootRt = (RectTransform)transform;
-            rootRt.anchorMin = Vector2.zero;
-            rootRt.anchorMax = Vector2.one;
-            rootRt.sizeDelta = Vector2.zero;
+            m_Root = (RectTransform)transform;
+            m_Root.anchorMin = Vector2.zero;
+            m_Root.anchorMax = Vector2.one;
+            m_Root.sizeDelta = Vector2.zero;
 
+            // Opaque graphite stage. (The project renders in linear space, where even a 95% overlay lets the
+            // emissive showroom read through; the violet stage lighting carries the atmosphere instead.)
             var bgShape = gameObject.GetComponent<AccertoneShape>();
             if (bgShape == null) bgShape = gameObject.AddComponent<AccertoneShape>();
-            bgShape.color = new Color(0.04f, 0.045f, 0.055f, 0.98f);
+            bgShape.color = SettingsTheme.Graphite;
+            bgShape.alphaLeft = 1f;
+            bgShape.alphaRight = 1f;
             bgShape.raycastTarget = true;
 
-            // 1. Top Header Bar
-            m_HeaderRt = AccertoneUIFactory.CreatePanel(transform, "PlayHeader", new Vector2(1608f, 72f), new Color(0.07f, 0.08f, 0.10f, 0.95f), 10f, ChamferCorners.TopRight | ChamferCorners.BottomLeft);
-            m_HeaderRt.anchorMin = new Vector2(0.5f, 1f);
-            m_HeaderRt.anchorMax = new Vector2(0.5f, 1f);
-            m_HeaderRt.pivot = new Vector2(0.5f, 1f);
-            m_HeaderRt.anchoredPosition = new Vector2(0f, -28f);
+            BuildStageLighting();
+            BuildHeader();
 
-            var titleText = AccertoneUIFactory.CreateText(m_HeaderRt, "Title", "PLAY // GAME MODES", BrandTextRole.Headline, Color.white);
-            var titleRt = (RectTransform)titleText.transform;
-            titleRt.anchorMin = new Vector2(0f, 0.5f);
-            titleRt.anchorMax = new Vector2(0f, 0.5f);
-            titleRt.pivot = new Vector2(0f, 0.5f);
-            titleRt.anchoredPosition = new Vector2(24f, 10f);
-            titleRt.sizeDelta = new Vector2(600f, 30f);
-            titleText.textWrappingMode = TextWrappingModes.NoWrap;
-            titleText.fontSize = 20f;
-
-            m_BreadcrumbText = AccertoneUIFactory.CreateText(m_HeaderRt, "Breadcrumb", "2026 FIA FORMULA ONE SEASON  ·  SELECT RACING DISCIPLINE", BrandTextRole.Caption, new Color(0.75f, 0.26f, 1f));
-            var bRt = (RectTransform)m_BreadcrumbText.transform;
-            bRt.anchorMin = new Vector2(0f, 0.5f);
-            bRt.anchorMax = new Vector2(0f, 0.5f);
-            bRt.pivot = new Vector2(0f, 0.5f);
-            bRt.anchoredPosition = new Vector2(24f, -16f);
-            bRt.sizeDelta = new Vector2(800f, 20f);
-            m_BreadcrumbText.textWrappingMode = TextWrappingModes.NoWrap;
-            m_BreadcrumbText.fontSize = 11f;
-            m_BreadcrumbText.characterSpacing = 8f;
-
-            var backBtn = AccertoneUIFactory.CreateButton(m_HeaderRt, "BackButton", "[ESC] RETURN TO SHOWROOM", new Vector2(280f, 38f), RequestBack);
-            var backRt = (RectTransform)backBtn.transform;
-            backRt.anchorMin = new Vector2(1f, 0.5f);
-            backRt.anchorMax = new Vector2(1f, 0.5f);
-            backRt.pivot = new Vector2(1f, 0.5f);
-            backRt.anchoredPosition = new Vector2(-24f, 0f);
-            var btnTxt = backBtn.GetComponentInChildren<TMP_Text>();
-            if (btnTxt != null) btnTxt.fontSize = 11f;
-
-            // 2. Cards Grid Container
-            var cardsGo = new GameObject("CardsGrid", typeof(RectTransform));
-            cardsGo.transform.SetParent(transform, false);
-            m_CardsContainer = (RectTransform)cardsGo.transform;
-            m_CardsContainer.anchorMin = new Vector2(0.5f, 0.5f);
-            m_CardsContainer.anchorMax = new Vector2(0.5f, 0.5f);
-            m_CardsContainer.pivot = new Vector2(0.5f, 0.5f);
-            m_CardsContainer.anchoredPosition = new Vector2(0f, -30f);
-            m_CardsContainer.sizeDelta = new Vector2(1608f, 680f);
-
+            // Cards row (fills the screen; cards are positioned in screen-centre space).
+            m_CardsContainer = SettingsUI.Stretch(SettingsUI.Rect("CardsRow", transform));
+            m_CardsGroup = m_CardsContainer.gameObject.AddComponent<CanvasGroup>();
             BuildModeCards();
 
-            // 3. Sub-Panel Container
-            var subGo = new GameObject("SubPanels", typeof(RectTransform));
-            subGo.transform.SetParent(transform, false);
-            m_SubPanelContainer = (RectTransform)subGo.transform;
+            // Sub-panel container (each mode's detail panel).
+            m_SubPanelContainer = SettingsUI.Rect("SubPanels", transform);
             m_SubPanelContainer.anchorMin = new Vector2(0.5f, 0.5f);
             m_SubPanelContainer.anchorMax = new Vector2(0.5f, 0.5f);
             m_SubPanelContainer.pivot = new Vector2(0.5f, 0.5f);
-            m_SubPanelContainer.anchoredPosition = new Vector2(0f, -30f);
-            m_SubPanelContainer.sizeDelta = new Vector2(1608f, 680f);
+            m_SubPanelContainer.sizeDelta = new Vector2(SubPanelWidth, SubPanelHeight);
+            m_SubGroup = m_SubPanelContainer.gameObject.AddComponent<CanvasGroup>();
             m_SubPanelContainer.gameObject.SetActive(false);
+
+            BuildFooter();
+
+            m_CanvasGroup.alpha = 0f;
+            m_ScreenFade.Set(0f);
+            m_HeaderReveal.Set(1f);
+            m_FooterReveal.Set(1f);
+            m_TitleReveal.Set(1f);
+            m_SubReveal.Set(0f);
+            m_Built = true;
+            LayoutScreen();
+        }
+
+        private void BuildStageLighting()
+        {
+            m_Ambient = SettingsUI.Stretch(SettingsUI.Rect("StageLighting", transform));
+            // Lighting animates every frame; its own canvas keeps that from touching anything else.
+            m_Ambient.gameObject.AddComponent<Canvas>();
+
+            var vignette = SettingsUI.Rect("Vignette", m_Ambient).gameObject.AddComponent<PlayGradient>();
+            SettingsUI.Stretch(vignette.rectTransform);
+            vignette.raycastTarget = false;
+            vignette.SetStopCount(4);
+            vignette.SetStop(0, 0f, SettingsTheme.A(SettingsTheme.Graphite, 0.55f));
+            vignette.SetStop(1, 0.22f, SettingsTheme.A(SettingsTheme.Graphite, 0f));
+            vignette.SetStop(2, 0.8f, SettingsTheme.A(SettingsTheme.Graphite, 0f));
+            vignette.SetStop(3, 1f, SettingsTheme.A(SettingsTheme.Graphite, 0.5f));
+
+            var glowTex = SettingsUI.RadialGlow();
+            m_GlowWide = Glow("WideViolet", glowTex, SettingsTheme.A(SettingsTheme.AccentDeep, 0.22f), new Vector2(1760f, 760f));
+            m_GlowHigh = Glow("HighViolet", glowTex, SettingsTheme.A(SettingsTheme.Accent, 0.06f), new Vector2(1100f, 640f));
+            m_Spot = Glow("FocusSpot", glowTex, SettingsTheme.A(SettingsTheme.Accent, 0f), new Vector2(560f, 230f));
+
+            m_FloorLine = SettingsUI.Rect("FloorLine", m_Ambient).gameObject.AddComponent<PlayGradient>();
+            m_FloorLine.raycastTarget = false;
+            m_FloorLine.axis = PlayGradient.Axis.Horizontal;
+            m_FloorLine.SetStopCount(4);
+            m_FloorLine.SetStop(0, 0f, SettingsTheme.A(SettingsTheme.Hairline, 0f));
+            m_FloorLine.SetStop(1, 0.16f, SettingsTheme.A(SettingsTheme.Hairline, 0.9f));
+            m_FloorLine.SetStop(2, 0.84f, SettingsTheme.A(SettingsTheme.Hairline, 0.9f));
+            m_FloorLine.SetStop(3, 1f, SettingsTheme.A(SettingsTheme.Hairline, 0f));
+
+            m_FloorAccent = SettingsUI.Shape(m_Ambient, "FloorAccent", SettingsTheme.Accent, 0f, ChamferCorners.None, 3f);
+            m_FloorAccent.canvasRenderer.SetAlpha(0f);
+        }
+
+        private RawImage Glow(string name, Texture tex, Color c, Vector2 size)
+        {
+            var rt = SettingsUI.Rect(name, m_Ambient);
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = size;
+            var img = rt.gameObject.AddComponent<RawImage>();
+            img.texture = tex;
+            img.color = c;
+            img.raycastTarget = false;
+            return img;
+        }
+
+        private void BuildHeader()
+        {
+            m_HeaderRt = SettingsUI.Rect("PlayHeader", transform);
+            m_HeaderRt.anchorMin = new Vector2(0f, 1f);
+            m_HeaderRt.anchorMax = new Vector2(1f, 1f);
+            m_HeaderRt.pivot = new Vector2(0.5f, 1f);
+            m_HeaderRt.offsetMin = new Vector2(SideMargin, -HeaderTop - 100f);
+            m_HeaderRt.offsetMax = new Vector2(-SideMargin, -HeaderTop);
+            m_HeaderGroup = m_HeaderRt.gameObject.AddComponent<CanvasGroup>();
+
+            var tick = SettingsUI.Fill(m_HeaderRt, "Tick", SettingsTheme.Accent);
+            SettingsUI.At(tick.rectTransform, 0f, 5f, 18f, 2f);
+            var eyebrow = SettingsUI.Text(m_HeaderRt, "Eyebrow", "PLAY", SettingsTheme.Label, 11f, SettingsTheme.Muted, 26f);
+            SettingsUI.At(eyebrow.rectTransform, 30f, 0f, 300f, 12f);
+
+            m_TitleBlock = SettingsUI.At(SettingsUI.Rect("TitleBlock", m_HeaderRt), 0f, 18f, 1100f, 82f);
+            m_TitleGroup = m_TitleBlock.gameObject.AddComponent<CanvasGroup>();
+            for (int i = 0; i < 2; i++)
+            {
+                var bar = SettingsUI.Shape(m_TitleBlock, "Mark", SettingsTheme.Accent, 0f, ChamferCorners.None, 9f);
+                SettingsUI.At(bar.rectTransform, i * 14f, 6f, 15f, 34f);
+            }
+            var title = SettingsUI.Text(m_TitleBlock, "Title", DefaultTitle, SettingsTheme.Display, 46f, SettingsTheme.White, 7f, TextAlignmentOptions.MidlineLeft, true);
+            SettingsUI.At(title.rectTransform, 46f, 0f, 1000f, 48f);
+            m_TitleText = title;
+            var blurb = SettingsUI.Text(m_TitleBlock, "Breadcrumb", DefaultBreadcrumb, SettingsTheme.Label, 11f, SettingsTheme.Text2, 22f);
+            SettingsUI.At(blurb.rectTransform, 0f, 58f, 1100f, 16f);
+            m_BreadcrumbText = blurb;
+
+            m_BackButton = AccertoneUIFactory.CreateButton(m_HeaderRt, "BackButton", "RETURN TO SHOWROOM", new Vector2(232f, 38f), RequestBack);
+            var backRt = (RectTransform)m_BackButton.transform;
+            backRt.anchorMin = backRt.anchorMax = new Vector2(1f, 1f);
+            backRt.pivot = new Vector2(1f, 1f);
+            backRt.anchoredPosition = new Vector2(0f, -24f);
+            m_BackLabel = m_BackButton.GetComponentInChildren<TMP_Text>();
+            if (m_BackLabel != null)
+            {
+                m_BackLabel.font = SettingsTheme.Label;
+                m_BackLabel.fontSize = 11f;
+                m_BackLabel.characterSpacing = 18f;
+            }
+        }
+
+        private void BuildFooter()
+        {
+            m_FooterRt = SettingsUI.Rect("PlayFooter", transform);
+            m_FooterRt.anchorMin = new Vector2(0f, 0f);
+            m_FooterRt.anchorMax = new Vector2(1f, 0f);
+            m_FooterRt.pivot = new Vector2(0.5f, 0f);
+            m_FooterRt.offsetMin = new Vector2(SideMargin, FooterBottom);
+            m_FooterRt.offsetMax = new Vector2(-SideMargin, FooterBottom + 54f);
+            m_FooterGroup = m_FooterRt.gameObject.AddComponent<CanvasGroup>();
+            m_Prompts = SettingsUI.At(SettingsUI.Rect("Prompts", m_FooterRt), 0f, 0f, 1100f, 54f);
+
+            m_CounterName = SettingsUI.Text(m_FooterRt, "ModeName", "", SettingsTheme.Label, 11f, SettingsTheme.Text2, 22f, TextAlignmentOptions.MidlineRight, true);
+            SettingsUI.AtRight(m_CounterName.rectTransform, 96f, 0f, 420f, 54f);
+            m_CounterText = SettingsUI.Text(m_FooterRt, "Counter", "", SettingsTheme.Data, 13f, SettingsTheme.Silver, 4f, TextAlignmentOptions.MidlineRight);
+            SettingsUI.AtRight(m_CounterText.rectTransform, 0f, 0f, 90f, 54f);
+            UpdateFooterCounter();
+        }
+
+        /// <summary>Key prompts are measured, so they are built the first time the screen is active (text measures 0 while inactive).</summary>
+        private void BuildPromptsIfNeeded()
+        {
+            if (m_PromptsBuilt || m_Prompts == null || !gameObject.activeInHierarchy) return;
+            m_PromptsBuilt = true;
+            float x = Prompt(m_Prompts, 0f, new[] { "ESC" }, "Back", RequestBack);
+            var grid = SettingsUI.At(SettingsUI.Rect("GridPrompts", m_Prompts), x + 28f, 0f, 900f, 54f);
+            m_GridPromptsGroup = grid.gameObject.AddComponent<CanvasGroup>();
+            m_GridPromptsGroup.blocksRaycasts = false;
+            m_GridPromptsGroup.alpha = m_IsInSubPanel ? 0f : 1f;
+            float gx = Prompt(grid, 0f, new[] { "←", "→" }, "Select", null);
+            gx = Prompt(grid, gx + 28f, new[] { "ENTER" }, "Confirm", null);
+            Prompt(grid, gx + 28f, new[] { "1–5" }, "Jump", null);
+        }
+
+        /// <summary>Key-cap prompt in the Settings footer style. Returns the x where the next prompt can start.</summary>
+        private static float Prompt(RectTransform parent, float x, string[] keys, string label, Action onClick)
+        {
+            var prompt = SettingsUI.At(SettingsUI.Rect("Prompt_" + label, parent), x, 0f, 10f, 54f);
+            float px = 0f;
+            foreach (var k in keys)
+            {
+                var cap = SettingsUI.Keycap(prompt, k);
+                cap.anchorMin = cap.anchorMax = new Vector2(0f, 0.5f);
+                cap.pivot = new Vector2(0f, 0.5f);
+                cap.anchoredPosition = new Vector2(px, 0f);
+                px += cap.sizeDelta.x + 3f;
+            }
+            var t = SettingsUI.Text(prompt, "Label", label, SettingsTheme.Label, 11f, SettingsTheme.Text2, 22f, TextAlignmentOptions.MidlineLeft, true);
+            SettingsUI.At(t.rectTransform, px + 6f, 0f, 200f, 54f);
+            float w = px + 6f + SettingsUI.PreferredWidth(t);
+            prompt.sizeDelta = new Vector2(w, 54f);
+            if (onClick != null)
+            {
+                var hit = SettingsUI.Fill(prompt, "Hit", new Color(0f, 0f, 0f, 0f), true);
+                SettingsUI.Stretch(hit.rectTransform);
+                var pointer = hit.gameObject.AddComponent<SettingsPointer>();
+                pointer.onClick = () => onClick();
+            }
+            return x + w;
         }
 
         private void BuildModeCards()
         {
-            // Card 1: QUICK MATCH (Hero Prominent Card on Left: 520w x 680h)
-            var c1 = CreateCard(m_CardsContainer, "Card_QuickMatch", new Vector2(-544f, 0f), new Vector2(520f, 680f),
-                PlayModeType.QuickMatch, m_QuickMatchSprite, "01", "SOLO // AI GRID", "QUICK MATCH",
-                "Play with AI", "Instant Grand Prix against a full 20-car AI field with customizable distance, grid size and pace.", true);
+            // Card 1: QUICK MATCH
+            var c1 = CreateCard(m_CardsContainer, "Card_QuickMatch", PlayModeType.QuickMatch, m_QuickMatchSprite, new Vector2(0.5f, 0.42f),
+                "01", "SOLO // AI GRID", "QUICK MATCH",
+                "Play with AI", "Instant Grand Prix against a full 20-car AI field with customizable distance, grid size and pace.");
             m_Cards.Add(c1);
 
-            // Card 2: ONLINE MULTIPLAYER (Right Column 1 Top: 520w x 328h)
-            var c2 = CreateCard(m_CardsContainer, "Card_Online", new Vector2(0f, 176f), new Vector2(520f, 328f),
-                PlayModeType.OnlineMultiplayer, m_MultiplayerSprite, "02", "ONLINE // 20 PLAYERS", "ONLINE MULTIPLAYER",
-                "Race against real players", "Join public rooms, host private 20-car sessions with room codes, or compete on dedicated servers.", false);
+            // Card 2: ONLINE MULTIPLAYER
+            var c2 = CreateCard(m_CardsContainer, "Card_Online", PlayModeType.OnlineMultiplayer, m_MultiplayerSprite, new Vector2(0.42f, 0.5f),
+                "02", "ONLINE // 20 PLAYERS", "ONLINE MULTIPLAYER",
+                "Race against real players", "Join public rooms, host private 20-car sessions with room codes, or compete on dedicated servers.");
             m_Cards.Add(c2);
 
-            // Card 3: CAREER (Right Column 1 Bottom: 520w x 328h)
-            var c3 = CreateCard(m_CardsContainer, "Card_Career", new Vector2(0f, -176f), new Vector2(520f, 328f),
-                PlayModeType.Career, m_CareerSprite, "03", "CHAMPIONSHIP // 24 ROUNDS", "CAREER",
-                "Build your racing career", "Compete through the 2026 FIA Formula One Championship calendar, earn points, and chase the Drivers' World Title.", false);
+            // Card 3: CAREER
+            var c3 = CreateCard(m_CardsContainer, "Card_Career", PlayModeType.Career, m_CareerSprite, new Vector2(0.43f, 0.5f),
+                "03", "CHAMPIONSHIP // 24 ROUNDS", "CAREER",
+                "Build your racing career", "Compete through the 2026 FIA Formula One Championship calendar, earn points, and chase the Drivers' World Title.");
             m_Cards.Add(c3);
 
-            // Card 4: HOT LAP (Right Column 2 Top: 520w x 328h)
-            var c4 = CreateCard(m_CardsContainer, "Card_HotLap", new Vector2(544f, 176f), new Vector2(520f, 328f),
-                PlayModeType.HotLap, m_HotLapSprite, "04", "TIME ATTACK // TELEMETRY", "HOT LAP",
-                "Set your fastest lap", "Pure single-lap qualifying shootout against the Valcorsa benchmark lap record (1:29.874).", false);
+            // Card 4: HOT LAP
+            var c4 = CreateCard(m_CardsContainer, "Card_HotLap", PlayModeType.HotLap, m_HotLapSprite, new Vector2(0.37f, 0.42f),
+                "04", "TIME ATTACK // TELEMETRY", "HOT LAP",
+                "Set your fastest lap", "Pure single-lap qualifying shootout against the Valcorsa benchmark lap record (1:29.874).");
             m_Cards.Add(c4);
 
-            // Card 5: FREE PRACTICE (Right Column 2 Bottom: 520w x 328h)
-            var c5 = CreateCard(m_CardsContainer, "Card_Practice", new Vector2(544f, -176f), new Vector2(520f, 328f),
-                PlayModeType.FreePractice, m_PracticeSprite, "05", "TESTING // SETUP & TUNING", "FREE PRACTICE",
-                "Practice and test car setups", "Unrestricted track session with live telemetry readouts and direct access to full vehicle setup tuning.", false);
+            // Card 5: FREE PRACTICE
+            var c5 = CreateCard(m_CardsContainer, "Card_Practice", PlayModeType.FreePractice, m_PracticeSprite, new Vector2(0.45f, 0.5f),
+                "05", "TESTING // SETUP & TUNING", "FREE PRACTICE",
+                "Practice and test car setups", "Unrestricted track session with live telemetry readouts and direct access to full vehicle setup tuning.");
             m_Cards.Add(c5);
+
+            // Explicit left / right navigation along the row; up reaches the back button.
+            for (int i = 0; i < m_Cards.Count; i++)
+            {
+                var nav = new Navigation { mode = Navigation.Mode.Explicit };
+                nav.selectOnLeft = i > 0 ? m_Cards[i - 1] : null;
+                nav.selectOnRight = i < m_Cards.Count - 1 ? m_Cards[i + 1] : null;
+                nav.selectOnUp = m_BackButton;
+                m_Cards[i].navigation = nav;
+                m_Cards[i].Index = i;
+            }
         }
 
-        private PlayModeCard CreateCard(Transform parent, string name, Vector2 pos, Vector2 size, PlayModeType type, Sprite sprite, string num, string tag, string title, string sub, string desc, bool featured)
+        private PlayModeCard CreateCard(Transform parent, string name, PlayModeType type, Sprite sprite, Vector2 focus, string num, string tag, string title, string sub, string desc)
         {
             var go = new GameObject(name, typeof(RectTransform));
+            go.layer = 5;
             go.transform.SetParent(parent, false);
             var rt = (RectTransform)go.transform;
             rt.anchorMin = new Vector2(0.5f, 0.5f);
             rt.anchorMax = new Vector2(0.5f, 0.5f);
             rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = pos;
-            rt.sizeDelta = size;
 
             var card = go.AddComponent<PlayModeCard>();
-            card.Setup(type, sprite, num, tag, title, sub, desc, featured, OnCardSelected);
+            card.Owner = this;
+            card.artFocus = focus;
+            card.Setup(type, sprite, num, tag, title, sub, desc, false, OnCardSelected);
             return card;
         }
 
@@ -209,16 +436,96 @@ namespace Accertone.Play
             OpenSubPanel(mode);
         }
 
+        // =========================================================================
+        // LAYOUT
+        // =========================================================================
+        private void OnRectTransformDimensionsChange()
+        {
+            if (m_Built) LayoutScreen();
+        }
+
+        /// <summary>Fits five identical cards (fixed aspect) into the space between header and footer at any resolution.</summary>
+        private void LayoutScreen()
+        {
+            if (!m_Built || m_Root == null) return;
+            Vector2 size = m_Root.rect.size;
+            if (size.x <= 1f || size.y <= 1f) return;
+            m_LastRootSize = size;
+
+            float availW = size.x - 2f * SideMargin;
+            float availH = size.y - RowTop - RowBottomMargin;
+            float w = (availW - 4f * CardGap) / 5f;
+            float h = w / CardAspect;
+            if (h > availH)
+            {
+                // Height-bound: keep the full height and widen up to the max aspect.
+                h = availH;
+                w = Mathf.Min(w, h * MaxCardAspect);
+            }
+            else if (availH > h * 1.25f)
+            {
+                // Lots of spare height: let the cards stand taller instead of floating in empty space.
+                h = Mathf.Min(availH * 0.8f, w / MinCardAspect);
+            }
+            w = Mathf.Floor(w);
+            h = Mathf.Floor(h);
+            m_CardSize = new Vector2(w, h);
+            m_RowWidth = 5f * w + 4f * CardGap;
+            m_RowCenter = new Vector2(0f, size.y * 0.5f - RowTop - availH * 0.5f);
+
+            for (int i = 0; i < m_Cards.Count; i++)
+            {
+                var rt = (RectTransform)m_Cards[i].transform;
+                rt.sizeDelta = m_CardSize;
+                rt.anchoredPosition = new Vector2(-m_RowWidth * 0.5f + w * 0.5f + i * (w + CardGap), m_RowCenter.y);
+            }
+
+            // Sub-panels keep their authored 1608×680 layout and scale down only when the screen is smaller.
+            float subAvailH = size.y - SubPanelTop - SubPanelBottomMargin;
+            float subScale = Mathf.Min(1f, Mathf.Min(availW / SubPanelWidth, subAvailH / SubPanelHeight));
+            m_SubPanelContainer.localScale = new Vector3(subScale, subScale, 1f);
+            m_SubHome = new Vector2(0f, size.y * 0.5f - SubPanelTop - subAvailH * 0.5f);
+            m_SubPanelContainer.anchoredPosition = m_SubHome;
+
+            // Stage lighting follows the row.
+            float floorY = m_RowCenter.y - h * 0.5f - 34f;
+            m_GlowWide.rectTransform.sizeDelta = new Vector2(m_RowWidth + 160f, h * 1.35f);
+            m_FloorLine.rectTransform.anchorMin = m_FloorLine.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            m_FloorLine.rectTransform.sizeDelta = new Vector2(m_RowWidth + 220f, 1f);
+            m_FloorLine.rectTransform.anchoredPosition = new Vector2(0f, floorY);
+            var accent = m_FloorAccent.rectTransform;
+            accent.anchorMin = accent.anchorMax = new Vector2(0.5f, 0.5f);
+            accent.sizeDelta = new Vector2(w * 0.42f, 2f);
+            m_Spot.rectTransform.sizeDelta = new Vector2(w * 1.9f, 200f);
+            UpdateStageLighting(true);
+        }
+
+        // =========================================================================
+        // OPEN / CLOSE
+        // =========================================================================
         public void Open(PlayModeType initialMode = PlayModeType.QuickMatch, bool openSubPanel = false)
         {
-            InitializeIfNeeded();
+            // Activate before building so text measures with its fonts initialised.
+            bool wasVisible = gameObject.activeSelf && m_CanvasGroup != null && m_CanvasGroup.alpha > 0.02f;
             gameObject.SetActive(true);
-            if (m_CanvasGroup != null)
+            InitializeIfNeeded();
+            BuildPromptsIfNeeded();
+            PlaceInLobbyHierarchy();
+
+            m_Open = true;
+            m_Closing = false;
+            m_Flow = Flow.Idle;
+            m_CanvasGroup.blocksRaycasts = true;
+            m_CanvasGroup.interactable = true;
+            m_ScreenFade.Start(m_CanvasGroup.alpha, 1f, 0.36f, 0f, PlayEase.OutCubic);
+            if (!wasVisible)
             {
-                m_CanvasGroup.alpha = 1f;
-                m_CanvasGroup.blocksRaycasts = true;
-                m_CanvasGroup.interactable = true;
+                m_HeaderReveal.Start(0f, 1f, 0.5f, 0.02f, PlayEase.OutCubic);
+                m_FooterReveal.Start(0f, 1f, 0.5f, 0.2f, PlayEase.OutCubic);
             }
+            m_InputReadyTime = PlayMotion.Now + 0.25f;
+            LayoutScreen();
+            ClearFocus();
 
             if (openSubPanel)
             {
@@ -226,24 +533,73 @@ namespace Accertone.Play
             }
             else
             {
-                BackToModeGrid();
+                DestroySubPanel();
+                ShowGrid(true);
             }
         }
 
         public void Close()
         {
+            ClearFocus();
+            m_Open = false;
+            m_IsInSubPanel = false;
+            m_Flow = Flow.Idle;
             if (m_CanvasGroup != null)
             {
-                m_CanvasGroup.alpha = 0f;
                 m_CanvasGroup.blocksRaycasts = false;
                 m_CanvasGroup.interactable = false;
             }
+            if (!gameObject.activeInHierarchy || m_CanvasGroup == null || PlayMotion.Instant)
+            {
+                FinishClose();
+                return;
+            }
+            m_Closing = true;
+            m_ScreenFade.Retarget(0f, 0.26f, 0f, PlayEase.OutCubic);
+            for (int i = 0; i < m_Cards.Count; i++) m_Cards[i].Hide(0f, 0.26f);
+        }
+
+        private void FinishClose()
+        {
+            m_Closing = false;
+            if (m_CanvasGroup != null) m_CanvasGroup.alpha = 0f;
+            m_ScreenFade.Set(0f);
+            DestroySubPanel();
+            if (m_SubPanelContainer != null) m_SubPanelContainer.gameObject.SetActive(false);
             gameObject.SetActive(false);
+        }
+
+        private void OnDisable()
+        {
+            m_Open = false;
+            m_Closing = false;
             m_IsInSubPanel = false;
+            m_Flow = Flow.Idle;
+            m_Active = null;
+            if (m_CanvasGroup != null) m_CanvasGroup.alpha = 0f;
+            m_ScreenFade.Set(0f);
+        }
+
+        /// <summary>
+        /// Draw the Play screen where the Settings screen sits (directly above the lobby backdrop), so the
+        /// wordmark and navigation stay on top of it and the race-launch transition overlay covers it.
+        /// </summary>
+        private void PlaceInLobbyHierarchy()
+        {
+            var parent = transform.parent;
+            if (parent == null) return;
+            var anchor = parent.Find("Screen_Settings");
+            if (anchor == null) anchor = parent.Find("Backdrop_Shades");
+            if (anchor == null || anchor == transform) return;
+            int current = transform.GetSiblingIndex();
+            int target = anchor.GetSiblingIndex() + 1;
+            if (current < target) target -= 1;
+            if (current != target) transform.SetSiblingIndex(target);
         }
 
         public void RequestBack()
         {
+            if (m_Flow != Flow.Idle) return;
             if (m_IsInSubPanel)
             {
                 BackToModeGrid();
@@ -257,29 +613,53 @@ namespace Accertone.Play
 
         public void BackToModeGrid()
         {
-            m_IsInSubPanel = false;
-            if (m_CurrentSubPanelGo != null)
+            if (m_IsInSubPanel && m_CurrentSubPanelGo != null && gameObject.activeInHierarchy && !PlayMotion.Instant)
             {
-                Destroy(m_CurrentSubPanelGo);
-                m_CurrentSubPanelGo = null;
+                // Sub-panel fades down first, then the cards come back in.
+                m_Flow = Flow.SubOut;
+                m_FlowTime = PlayMotion.Now;
+                m_SubGroup.interactable = false;
+                m_SubGroup.blocksRaycasts = false;
+                m_SubReveal.Retarget(0f, 0.2f, 0f, PlayEase.OutCubic);
+                return;
             }
+            DestroySubPanel();
+            ShowGrid(true);
+        }
+
+        private void ShowGrid(bool animate, float firstDelay = 0.1f)
+        {
+            m_IsInSubPanel = false;
+            m_Flow = Flow.Idle;
             if (m_SubPanelContainer != null) m_SubPanelContainer.gameObject.SetActive(false);
             if (m_CardsContainer != null) m_CardsContainer.gameObject.SetActive(true);
-            if (m_BreadcrumbText != null)
-                m_BreadcrumbText.text = "2026 FIA FORMULA ONE SEASON  ·  SELECT RACING DISCIPLINE";
+            m_CardsGroup.interactable = true;
+            m_CardsGroup.blocksRaycasts = true;
+            LayoutScreen();
+            for (int i = 0; i < m_Cards.Count; i++)
+            {
+                m_Cards[i].SnapHidden();
+                m_Cards[i].Show(animate ? firstDelay + i * 0.065f : 0f, animate ? 0.85f : 0f);
+            }
+            SetHeader(DefaultTitle, DefaultBreadcrumb);
+            if (m_BackLabel != null) m_BackLabel.text = "RETURN TO SHOWROOM";
+            UpdateFooterCounter();
         }
 
         public void OpenSubPanel(PlayModeType mode)
         {
+            InitializeIfNeeded();
             m_ActiveSubMode = mode;
             m_IsInSubPanel = true;
+            m_Flow = Flow.Idle;
+            ClearFocus();
 
+            for (int i = 0; i < m_Cards.Count; i++) m_Cards[i].SnapHidden();
             if (m_CardsContainer != null) m_CardsContainer.gameObject.SetActive(false);
             if (m_SubPanelContainer != null)
             {
+                DestroySubPanel();
                 m_SubPanelContainer.gameObject.SetActive(true);
-                if (m_CurrentSubPanelGo != null) Destroy(m_CurrentSubPanelGo);
-
                 switch (mode)
                 {
                     case PlayModeType.QuickMatch:
@@ -299,6 +679,321 @@ namespace Accertone.Play
                         break;
                 }
             }
+
+            m_SubGroup.interactable = true;
+            m_SubGroup.blocksRaycasts = true;
+            m_SubReveal.Start(0f, 1f, 0.46f, 0.02f, PlayEase.OutCubic);
+            string crumb = m_BreadcrumbText != null ? m_BreadcrumbText.text : DefaultBreadcrumb;
+            SetHeader(ModeTitle(mode), crumb);
+            if (m_BackLabel != null) m_BackLabel.text = "BACK TO GAME MODES";
+            UpdateFooterCounter();
+        }
+
+        private void SetHeader(string title, string crumb)
+        {
+            bool changed = m_TitleText != null && m_TitleText.text != title;
+            if (m_TitleText != null) m_TitleText.text = title;
+            if (m_BreadcrumbText != null) m_BreadcrumbText.text = crumb;
+            if (changed || m_TitleReveal.Done) m_TitleReveal.Start(0f, 1f, 0.42f, 0.04f, PlayEase.OutCubic);
+        }
+
+        private static string ModeTitle(PlayModeType mode)
+        {
+            switch (mode)
+            {
+                case PlayModeType.OnlineMultiplayer: return "ONLINE MULTIPLAYER";
+                case PlayModeType.Career: return "CAREER";
+                case PlayModeType.HotLap: return "HOT LAP";
+                case PlayModeType.FreePractice: return "FREE PRACTICE";
+                default: return "QUICK MATCH";
+            }
+        }
+
+        private void DestroySubPanel()
+        {
+            if (m_CurrentSubPanelGo != null)
+            {
+                Destroy(m_CurrentSubPanelGo);
+                m_CurrentSubPanelGo = null;
+            }
+            if (m_SubPanelContainer != null)
+            {
+                for (int i = m_SubPanelContainer.childCount - 1; i >= 0; i--)
+                    Destroy(m_SubPanelContainer.GetChild(i).gameObject);
+            }
+        }
+
+        /// <summary>Starts a fresh sub-panel, removing the previous one (option changes rebuild the panel in place).</summary>
+        private GameObject BeginSubPanel(string name)
+        {
+            if (m_CurrentSubPanelGo != null) Destroy(m_CurrentSubPanelGo);
+            var go = new GameObject(name, typeof(RectTransform));
+            go.layer = 5;
+            go.transform.SetParent(m_SubPanelContainer, false);
+            return go;
+        }
+
+        // =========================================================================
+        // FOCUS (called by the cards)
+        // =========================================================================
+        internal void OnCardPointerEnter(PlayModeCard card)
+        {
+            if (!CanFocus()) return;
+            SetActiveCard(card);
+            var es = EventSystem.current;
+            if (es != null && es.currentSelectedGameObject != card.gameObject)
+            {
+                m_SelectingFromPointer = true;
+                es.SetSelectedGameObject(card.gameObject);
+                m_SelectingFromPointer = false;
+            }
+            card.SelectedByPointer = true;
+        }
+
+        internal void OnCardPointerExit(PlayModeCard card)
+        {
+            if (m_Flow != Flow.Idle) return; // keep the confirmed card lit while the screen hands over
+            if (m_Active != card) return;
+            SetActiveCard(null);
+            var es = EventSystem.current;
+            if (es != null && es.currentSelectedGameObject == card.gameObject && card.SelectedByPointer)
+                es.SetSelectedGameObject(null);
+        }
+
+        internal void OnCardSelected(PlayModeCard card)
+        {
+            if (!CanFocus()) return;
+            card.SelectedByPointer = m_SelectingFromPointer;
+            SetActiveCard(card);
+        }
+
+        internal void OnCardDeselected(PlayModeCard card)
+        {
+            if (m_Flow != Flow.Idle) return;
+            if (m_Active == card && !card.PointerInside) SetActiveCard(null);
+        }
+
+        internal void ConfirmCard(PlayModeCard card)
+        {
+            if (!m_Open || m_Flow != Flow.Idle || m_IsInSubPanel || !card.IsShown) return;
+            SetActiveCard(card);
+            m_PendingMode = card.modeType;
+            m_ConfirmIndex = card.Index;
+            card.PlayConfirm();
+            m_CardsGroup.interactable = false;
+            m_Flow = Flow.Confirming;
+            m_FlowTime = PlayMotion.Now;
+            if (PlayMotion.Instant)
+            {
+                m_Flow = Flow.Idle;
+                OpenSubPanel(m_PendingMode);
+            }
+        }
+
+        private bool CanFocus()
+        {
+            return m_Open && !m_Closing && m_Flow == Flow.Idle && !m_IsInSubPanel;
+        }
+
+        private void SetActiveCard(PlayModeCard card)
+        {
+            if (m_Active == card) return;
+            if (m_Active != null) m_LastActiveTime = PlayMotion.Now;
+            m_Active = card;
+            if (card != null) m_LastIndex = card.Index;
+            UpdateFooterCounter();
+        }
+
+        private void ClearFocus()
+        {
+            var es = EventSystem.current;
+            if (es != null && es.currentSelectedGameObject != null && es.currentSelectedGameObject.GetComponent<PlayModeCard>() != null)
+                es.SetSelectedGameObject(null);
+            m_Active = null;
+            m_LastActiveTime = -10f;
+        }
+
+        private void FocusCard(int index)
+        {
+            if (index < 0 || index >= m_Cards.Count || !CanFocus()) return;
+            var es = EventSystem.current;
+            if (es != null) es.SetSelectedGameObject(m_Cards[index].gameObject);
+            else SetActiveCard(m_Cards[index]);
+        }
+
+        private void UpdateFooterCounter()
+        {
+            if (m_CounterText == null) return;
+            if (m_IsInSubPanel)
+            {
+                m_CounterText.text = "0" + ((int)m_ActiveSubMode + 1) + " / 05";
+                m_CounterName.text = ModeTitle(m_ActiveSubMode);
+                m_CounterName.color = SettingsTheme.Silver;
+            }
+            else if (m_Active != null)
+            {
+                m_CounterText.text = m_Active.modeNumber + " / 05";
+                m_CounterName.text = m_Active.title;
+                m_CounterName.color = SettingsTheme.AccentLight;
+            }
+            else
+            {
+                m_CounterText.text = "— / 05";
+                m_CounterName.text = "Choose a discipline";
+                m_CounterName.color = SettingsTheme.Muted;
+            }
+        }
+
+        // =========================================================================
+        // FRAME
+        // =========================================================================
+        private void Update()
+        {
+            if (!m_Built) return;
+            float now = PlayMotion.Now;
+
+            if (m_Root != null && m_Root.rect.size != m_LastRootSize) LayoutScreen();
+
+            // Screen fade and the Settings-style header / footer reveal.
+            m_CanvasGroup.alpha = m_ScreenFade.Value;
+            float hr = m_HeaderReveal.Value;
+            m_HeaderGroup.alpha = hr;
+            m_HeaderRt.anchoredPosition = new Vector2(0f, -HeaderTop - 14f * (1f - hr));
+            float fr = m_FooterReveal.Value;
+            m_FooterGroup.alpha = fr;
+            m_FooterRt.anchoredPosition = new Vector2(0f, FooterBottom - 14f * (1f - fr));
+            float tr = m_TitleReveal.Value;
+            m_TitleGroup.alpha = tr;
+            m_TitleBlock.anchoredPosition = new Vector2(-12f * (1f - tr), -18f);
+            float sub = m_SubReveal.Value;
+            m_SubGroup.alpha = sub;
+            if (m_IsInSubPanel || m_Flow == Flow.SubOut)
+                m_SubPanelContainer.anchoredPosition = m_SubHome + new Vector2(0f, -18f * (1f - sub));
+            if (m_GridPromptsGroup != null)
+                m_GridPromptsGroup.alpha = Mathf.MoveTowards(m_GridPromptsGroup.alpha, m_IsInSubPanel ? 0f : 1f, Time.unscaledDeltaTime * 6f);
+
+            if (m_Closing && m_ScreenFade.Done)
+            {
+                FinishClose();
+                return;
+            }
+
+            UpdateFlow(now);
+            UpdateStageLighting(false);
+            HandleNavigationInput(now);
+        }
+
+        private void UpdateFlow(float now)
+        {
+            switch (m_Flow)
+            {
+                case Flow.Confirming:
+                    if (now - m_FlowTime >= 0.16f * AccertoneMotion.Scale)
+                    {
+                        // Cards fall away outward from the chosen one.
+                        for (int i = 0; i < m_Cards.Count; i++)
+                            m_Cards[i].Hide(Mathf.Abs(i - m_ConfirmIndex) * 0.04f, i == m_ConfirmIndex ? 0.34f : 0.28f);
+                        m_Flow = Flow.GridOut;
+                        m_FlowTime = now;
+                    }
+                    break;
+                case Flow.GridOut:
+                    if (now - m_FlowTime >= 0.34f * AccertoneMotion.Scale)
+                    {
+                        m_Flow = Flow.Idle;
+                        m_Active = null;
+                        OpenSubPanel(m_PendingMode);
+                    }
+                    break;
+                case Flow.SubOut:
+                    if (m_SubReveal.Done)
+                    {
+                        m_Flow = Flow.Idle;
+                        DestroySubPanel();
+                        ShowGrid(true, 0.02f);
+                    }
+                    break;
+            }
+        }
+
+        private void UpdateStageLighting(bool snap)
+        {
+            if (m_Ambient == null) return;
+            float now = PlayMotion.Now;
+            float dt = snap ? 1f : Time.unscaledDeltaTime;
+
+            // Slow parallax against the pointer.
+            Vector2 n = Vector2.zero;
+#if ENABLE_INPUT_SYSTEM
+            var pointer = Pointer.current;
+            if (pointer != null && Screen.width > 0 && Screen.height > 0)
+            {
+                Vector2 p = pointer.position.ReadValue();
+                n = new Vector2(Mathf.Clamp(p.x / Screen.width * 2f - 1f, -1f, 1f), Mathf.Clamp(p.y / Screen.height * 2f - 1f, -1f, 1f));
+            }
+#endif
+            m_ParallaxX.Step(n.x, 0.6f, dt);
+            m_ParallaxY.Step(n.y, 0.6f, dt);
+            Vector2 parallax = new Vector2(m_ParallaxX.value * -22f, m_ParallaxY.value * -12f);
+
+            float breathe = 0.5f + 0.5f * Mathf.Sin(now * 0.55f);
+            m_GlowWide.rectTransform.anchoredPosition = m_RowCenter + new Vector2(Mathf.Sin(now * 0.11f) * 60f, -m_CardSize.y * 0.28f + Mathf.Sin(now * 0.17f) * 10f) + parallax;
+            m_GlowWide.color = SettingsTheme.A(SettingsTheme.AccentDeep, 0.17f + 0.05f * breathe);
+            m_GlowHigh.rectTransform.anchoredPosition = new Vector2(m_LastRootSize.x * 0.27f + Mathf.Cos(now * 0.09f) * 50f, m_LastRootSize.y * 0.26f + Mathf.Sin(now * 0.13f) * 22f) + parallax * 1.6f;
+            m_GlowHigh.color = SettingsTheme.A(SettingsTheme.Accent, 0.045f + 0.025f * (1f - breathe));
+
+            // Focus spot and floor accent glide to the active card.
+            bool has = m_Active != null && !m_IsInSubPanel;
+            if (has)
+            {
+                float x = ((RectTransform)m_Active.transform).anchoredPosition.x;
+                // Fade in where the focus lands; once lit, glide between cards.
+                if (m_SpotAlpha.value < 0.03f) m_SpotX.Snap(x);
+                else m_SpotX.Step(x, 0.14f, dt);
+            }
+            if (snap && m_Active == null) m_SpotX.Snap(m_SpotX.value);
+            m_SpotAlpha.Step(has ? 1f : 0f, has ? 0.16f : 0.22f, dt);
+            float floorY = m_RowCenter.y - m_CardSize.y * 0.5f - 34f;
+            m_Spot.rectTransform.anchoredPosition = new Vector2(m_SpotX.value, floorY + 6f);
+            m_Spot.color = SettingsTheme.A(SettingsTheme.Accent, 0.2f * m_SpotAlpha.value);
+            m_FloorAccent.rectTransform.anchoredPosition = new Vector2(m_SpotX.value, floorY);
+            m_FloorAccent.canvasRenderer.SetAlpha(m_SpotAlpha.value);
+        }
+
+        private void HandleNavigationInput(float now)
+        {
+            if (!m_Open || m_Closing || m_Flow != Flow.Idle || m_IsInSubPanel || now < m_InputReadyTime) return;
+#if ENABLE_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb != null)
+            {
+                for (int i = 0; i < 5; i++)
+                {
+                    if (kb[(Key)((int)Key.Digit1 + i)].wasPressedThisFrame || kb[(Key)((int)Key.Numpad1 + i)].wasPressedThisFrame)
+                    {
+                        FocusCard(i);
+                        return;
+                    }
+                }
+            }
+
+            // Nothing selected yet (mouse was elsewhere): the first directional / confirm press picks up focus.
+            var es = EventSystem.current;
+            if (es == null || es.currentSelectedGameObject != null) return;
+            bool nav = false;
+            if (kb != null)
+                nav = kb.leftArrowKey.wasPressedThisFrame || kb.rightArrowKey.wasPressedThisFrame ||
+                      kb.upArrowKey.wasPressedThisFrame || kb.downArrowKey.wasPressedThisFrame ||
+                      kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame ||
+                      kb.spaceKey.wasPressedThisFrame || kb.tabKey.wasPressedThisFrame;
+            var pad = Gamepad.current;
+            if (!nav && pad != null)
+                nav = pad.dpad.left.wasPressedThisFrame || pad.dpad.right.wasPressedThisFrame ||
+                      pad.dpad.up.wasPressedThisFrame || pad.dpad.down.wasPressedThisFrame ||
+                      pad.leftStick.left.wasPressedThisFrame || pad.leftStick.right.wasPressedThisFrame ||
+                      pad.buttonSouth.wasPressedThisFrame;
+            if (nav) FocusCard(Mathf.Clamp(m_LastIndex, 0, m_Cards.Count - 1));
+#endif
         }
 
         // =========================================================================
@@ -309,8 +1004,7 @@ namespace Accertone.Play
             if (m_BreadcrumbText != null)
                 m_BreadcrumbText.text = "PLAY // QUICK MATCH  ·  SINGLE PLAYER AI GRAND PRIX";
 
-            m_CurrentSubPanelGo = new GameObject("Panel_QuickMatch", typeof(RectTransform));
-            m_CurrentSubPanelGo.transform.SetParent(m_SubPanelContainer, false);
+            m_CurrentSubPanelGo = BeginSubPanel("Panel_QuickMatch");
             var rootRt = (RectTransform)m_CurrentSubPanelGo.transform;
             rootRt.anchorMin = Vector2.zero;
             rootRt.anchorMax = Vector2.one;
@@ -365,7 +1059,7 @@ namespace Accertone.Play
             var qm = GameModeManager.Instance != null ? GameModeManager.Instance.quickMatch : new QuickMatchConfig();
 
             // Config Option 1: AI Opponents (3 - 19)
-            CreateConfigStepper(rightRt, "AI GRID SIZE", (qm.aiDriverCount + 1) + " CARS (19 AI OPPONENTS)", -90f, () => {
+            CreateConfigStepper(rightRt, "AI GRID SIZE", (qm.aiDriverCount + 1) + " CARS (" + qm.aiDriverCount + " AI OPPONENTS)", -90f, () => {
                 qm.aiDriverCount = qm.aiDriverCount == 19 ? 9 : (qm.aiDriverCount == 9 ? 3 : 19);
                 BuildQuickMatchSubPanel();
             });
@@ -410,8 +1104,7 @@ namespace Accertone.Play
             if (m_BreadcrumbText != null)
                 m_BreadcrumbText.text = "PLAY // ONLINE MULTIPLAYER  ·  DEDICATED 20-PLAYER GRID";
 
-            m_CurrentSubPanelGo = new GameObject("Panel_Multiplayer", typeof(RectTransform));
-            m_CurrentSubPanelGo.transform.SetParent(m_SubPanelContainer, false);
+            m_CurrentSubPanelGo = BeginSubPanel("Panel_Multiplayer");
             var rootRt = (RectTransform)m_CurrentSubPanelGo.transform;
             rootRt.anchorMin = Vector2.zero;
             rootRt.anchorMax = Vector2.one;
@@ -569,8 +1262,7 @@ namespace Accertone.Play
             if (m_BreadcrumbText != null)
                 m_BreadcrumbText.text = "PLAY // CAREER  ·  2026 FIA FORMULA ONE WORLD CHAMPIONSHIP";
 
-            m_CurrentSubPanelGo = new GameObject("Panel_Career", typeof(RectTransform));
-            m_CurrentSubPanelGo.transform.SetParent(m_SubPanelContainer, false);
+            m_CurrentSubPanelGo = BeginSubPanel("Panel_Career");
             var rootRt = (RectTransform)m_CurrentSubPanelGo.transform;
             rootRt.anchorMin = Vector2.zero;
             rootRt.anchorMax = Vector2.one;
@@ -694,8 +1386,7 @@ namespace Accertone.Play
             if (m_BreadcrumbText != null)
                 m_BreadcrumbText.text = "PLAY // HOT LAP  ·  QUALIFYING TIMING SHOOTOUT & DELTAS";
 
-            m_CurrentSubPanelGo = new GameObject("Panel_HotLap", typeof(RectTransform));
-            m_CurrentSubPanelGo.transform.SetParent(m_SubPanelContainer, false);
+            m_CurrentSubPanelGo = BeginSubPanel("Panel_HotLap");
             var rootRt = (RectTransform)m_CurrentSubPanelGo.transform;
             rootRt.anchorMin = Vector2.zero;
             rootRt.anchorMax = Vector2.one;
@@ -814,8 +1505,7 @@ namespace Accertone.Play
             if (m_BreadcrumbText != null)
                 m_BreadcrumbText.text = "PLAY // FREE PRACTICE  ·  TESTING & SETUP TUNING";
 
-            m_CurrentSubPanelGo = new GameObject("Panel_Practice", typeof(RectTransform));
-            m_CurrentSubPanelGo.transform.SetParent(m_SubPanelContainer, false);
+            m_CurrentSubPanelGo = BeginSubPanel("Panel_Practice");
             var rootRt = (RectTransform)m_CurrentSubPanelGo.transform;
             rootRt.anchorMin = Vector2.zero;
             rootRt.anchorMax = Vector2.one;
