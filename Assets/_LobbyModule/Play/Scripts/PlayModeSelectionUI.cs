@@ -93,6 +93,10 @@ namespace Accertone.Play
 
         // Sub-panel UI references
         private GameObject m_CurrentSubPanelGo;
+        // Keyboard / gamepad focus carried across an in-place rebuild, as a sibling-index path from the panel root.
+        private readonly List<int> m_SubFocusPath = new List<int>();
+        private bool m_RestoreSubFocus;
+        private bool m_SubPanelFresh;
 
         // Stage lighting
         private RectTransform m_Ambient;
@@ -728,6 +732,7 @@ namespace Accertone.Play
 
         private void DestroySubPanel()
         {
+            m_RestoreSubFocus = false;
             if (m_CurrentSubPanelGo != null)
             {
                 Destroy(m_CurrentSubPanelGo);
@@ -743,11 +748,65 @@ namespace Accertone.Play
         /// <summary>Starts a fresh sub-panel, removing the previous one (option changes rebuild the panel in place).</summary>
         private GameObject BeginSubPanel(string name)
         {
-            if (m_CurrentSubPanelGo != null) Destroy(m_CurrentSubPanelGo);
+            if (m_CurrentSubPanelGo != null)
+            {
+                RememberSubPanelFocus(m_CurrentSubPanelGo.transform);
+                Destroy(m_CurrentSubPanelGo);
+            }
             var go = new GameObject(name, typeof(RectTransform));
             go.layer = 5;
             go.transform.SetParent(m_SubPanelContainer, false);
+            m_SubPanelFresh = true;
             return go;
+        }
+
+        /// <summary>Notes which control had focus so the rebuilt panel (same layout, new objects) can hand it back.</summary>
+        private void RememberSubPanelFocus(Transform panel)
+        {
+            m_SubFocusPath.Clear();
+            m_RestoreSubFocus = false;
+            var es = EventSystem.current;
+            var selected = es != null ? es.currentSelectedGameObject : null;
+            if (selected == null || !selected.transform.IsChildOf(panel)) return;
+            for (var t = selected.transform; t != panel; t = t.parent)
+                m_SubFocusPath.Insert(0, t.GetSiblingIndex());
+            m_RestoreSubFocus = true;
+        }
+
+        /// <summary>
+        /// Keeps keyboard / gamepad focus inside a sub-panel and visible: rings the panel's buttons once built, gives
+        /// focus back after an option change rebuilds the panel, and otherwise picks it up on the first directional /
+        /// confirm press, as the card row does.
+        /// </summary>
+        private void HandleSubPanelFocus()
+        {
+            if (m_CurrentSubPanelGo == null) return;
+            if (m_SubPanelFresh)
+            {
+                m_SubPanelFresh = false;
+                PlayFocusRing.Attach(m_CurrentSubPanelGo);
+            }
+            var es = EventSystem.current;
+            if (es == null) return;
+            if (m_RestoreSubFocus)
+            {
+                m_RestoreSubFocus = false;
+                Transform t = m_CurrentSubPanelGo.transform;
+                for (int i = 0; i < m_SubFocusPath.Count && t != null; i++)
+                    t = m_SubFocusPath[i] < t.childCount ? t.GetChild(m_SubFocusPath[i]) : null;
+                if (t != null && t.GetComponent<Selectable>() != null)
+                {
+                    es.SetSelectedGameObject(t.gameObject);
+                    return;
+                }
+            }
+            var current = es.currentSelectedGameObject;
+            if (current != null && current.activeInHierarchy) return;
+#if ENABLE_INPUT_SYSTEM
+            if (!NavigationPressed()) return;
+            var first = m_CurrentSubPanelGo.GetComponentInChildren<Selectable>();
+            if (first != null) es.SetSelectedGameObject(first.gameObject);
+#endif
         }
 
         // =========================================================================
@@ -980,7 +1039,12 @@ namespace Accertone.Play
 
         private void HandleNavigationInput(float now)
         {
-            if (!m_Open || m_Closing || m_Flow != Flow.Idle || m_IsInSubPanel || now < m_InputReadyTime) return;
+            if (!m_Open || m_Closing || m_Flow != Flow.Idle || now < m_InputReadyTime) return;
+            if (m_IsInSubPanel)
+            {
+                HandleSubPanelFocus();
+                return;
+            }
 #if ENABLE_INPUT_SYSTEM
             var kb = Keyboard.current;
             if (kb != null)
@@ -998,21 +1062,29 @@ namespace Accertone.Play
             // Nothing selected yet (mouse was elsewhere): the first directional / confirm press picks up focus.
             var es = EventSystem.current;
             if (es == null || es.currentSelectedGameObject != null) return;
-            bool nav = false;
-            if (kb != null)
-                nav = kb.leftArrowKey.wasPressedThisFrame || kb.rightArrowKey.wasPressedThisFrame ||
-                      kb.upArrowKey.wasPressedThisFrame || kb.downArrowKey.wasPressedThisFrame ||
-                      kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame ||
-                      kb.spaceKey.wasPressedThisFrame || kb.tabKey.wasPressedThisFrame;
-            var pad = Gamepad.current;
-            if (!nav && pad != null)
-                nav = pad.dpad.left.wasPressedThisFrame || pad.dpad.right.wasPressedThisFrame ||
-                      pad.dpad.up.wasPressedThisFrame || pad.dpad.down.wasPressedThisFrame ||
-                      pad.leftStick.left.wasPressedThisFrame || pad.leftStick.right.wasPressedThisFrame ||
-                      pad.buttonSouth.wasPressedThisFrame;
-            if (nav) FocusCard(Mathf.Clamp(m_LastIndex, 0, m_Cards.Count - 1));
+            if (NavigationPressed()) FocusCard(Mathf.Clamp(m_LastIndex, 0, m_Cards.Count - 1));
 #endif
         }
+
+#if ENABLE_INPUT_SYSTEM
+        private static bool NavigationPressed()
+        {
+            var kb = Keyboard.current;
+            if (kb != null &&
+                (kb.leftArrowKey.wasPressedThisFrame || kb.rightArrowKey.wasPressedThisFrame ||
+                 kb.upArrowKey.wasPressedThisFrame || kb.downArrowKey.wasPressedThisFrame ||
+                 kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame ||
+                 kb.spaceKey.wasPressedThisFrame || kb.tabKey.wasPressedThisFrame))
+                return true;
+            var pad = Gamepad.current;
+            return pad != null &&
+                   (pad.dpad.left.wasPressedThisFrame || pad.dpad.right.wasPressedThisFrame ||
+                    pad.dpad.up.wasPressedThisFrame || pad.dpad.down.wasPressedThisFrame ||
+                    pad.leftStick.left.wasPressedThisFrame || pad.leftStick.right.wasPressedThisFrame ||
+                    pad.leftStick.up.wasPressedThisFrame || pad.leftStick.down.wasPressedThisFrame ||
+                    pad.buttonSouth.wasPressedThisFrame);
+        }
+#endif
 
         // =========================================================================
         // SUB-PANEL 1: QUICK MATCH
@@ -1755,6 +1827,16 @@ namespace Accertone.Play
                 }
             }
 
+            var hint = AccertoneUIFactory.CreateText(leftRt, "JoinHint", "FRIENDS JOIN AS SOON AS THEY ACCEPT  ·  ANYONE WITH THE ROOM CODE CAN JOIN", BrandTextRole.Caption, SettingsTheme.Muted);
+            var hRt = (RectTransform)hint.transform;
+            hRt.anchorMin = new Vector2(0f, 0f);
+            hRt.anchorMax = new Vector2(1f, 0f);
+            hRt.pivot = new Vector2(0f, 0f);
+            hRt.anchoredPosition = new Vector2(28f, 26f);
+            hRt.sizeDelta = new Vector2(-56f, 16f);
+            hint.fontSize = 10f;
+            hint.textWrappingMode = TextWrappingModes.NoWrap;
+
             // Right Box: Private session rules (800w x 680h)
             var rightRt = AccertoneUIFactory.CreatePanel(rootRt, "PrivateSession", new Vector2(800f, 680f), new Color(0.08f, 0.09f, 0.11f, 0.95f), 12f);
             rightRt.anchorMin = new Vector2(1f, 0.5f);
@@ -1803,6 +1885,26 @@ namespace Accertone.Play
                 BuildFriendsSubPanel();
             });
 
+            // Lobby: drivers already in, then pending invites, then open slots.
+            var lobbyTitle = AccertoneUIFactory.CreateText(rightRt, "LobbyTitle",
+                "LOBBY  ·  " + (inLobby + 1) + " / 20 DRIVERS" + (invited > 0 ? "  ·  " + invited + (invited == 1 ? " INVITE" : " INVITES") + " PENDING" : ""),
+                BrandTextRole.Caption, new Color(0.62f, 0.66f, 0.72f));
+            var lbRt = (RectTransform)lobbyTitle.transform;
+            lbRt.anchorMin = new Vector2(0f, 1f);
+            lbRt.anchorMax = new Vector2(1f, 1f);
+            lbRt.pivot = new Vector2(0f, 1f);
+            lbRt.anchoredPosition = new Vector2(28f, -448f);
+            lbRt.sizeDelta = new Vector2(-56f, 16f);
+            lobbyTitle.fontSize = 11f;
+
+            int slot = 0;
+            CreateLobbySlot(rightRt, slot++, "YOU", "HOST", true);
+            foreach (var f in friends)
+                if (f.hasJoined && slot < LobbySlots) CreateLobbySlot(rightRt, slot++, f.gamerTag, "READY", true);
+            foreach (var f in friends)
+                if (f.isInvited && !f.hasJoined && slot < LobbySlots) CreateLobbySlot(rightRt, slot++, f.gamerTag, "INVITED", false);
+            while (slot < LobbySlots) CreateLobbySlot(rightRt, slot++, null, "OPEN SLOT", false);
+
             var startBtn = AccertoneUIFactory.CreateButton(rightRt, "StartPrivateBtn", "START PRIVATE RACE  //  " + (inLobby + 1) + " DRIVERS READY", new Vector2(744f, 54f), () => {
                 gm?.LaunchSession(PlayModeType.PlayWithFriends);
             }, true);
@@ -1811,6 +1913,53 @@ namespace Accertone.Play
             sbRt.anchorMax = new Vector2(0.5f, 0f);
             sbRt.pivot = new Vector2(0.5f, 0f);
             sbRt.anchoredPosition = new Vector2(0f, 32f);
+        }
+
+        private const int LobbySlots = 8;
+
+        /// <summary>One chip of the private-session lobby: four per row under the rules, name over state.</summary>
+        private void CreateLobbySlot(RectTransform parent, int index, string driver, string state, bool inLobby)
+        {
+            const float w = 178.5f, h = 42f, gap = 10f;
+            bool open = driver == null;
+            var chip = AccertoneUIFactory.CreatePanel(parent, "LobbySlot_" + index, new Vector2(w, h),
+                inLobby ? new Color(0.18f, 0.12f, 0.24f, 1f) : (open ? new Color(0.09f, 0.10f, 0.12f, 1f) : new Color(0.11f, 0.13f, 0.16f, 1f)), 6f);
+            chip.anchorMin = chip.anchorMax = new Vector2(0f, 1f);
+            chip.pivot = new Vector2(0f, 1f);
+            chip.anchoredPosition = new Vector2(28f + (index % 4) * (w + gap), -472f - (index / 4) * (h + 8f));
+
+            if (open)
+            {
+                var label = AccertoneUIFactory.CreateText(chip, "State", state, BrandTextRole.Caption, new Color(0.42f, 0.44f, 0.49f), TextAlignmentOptions.Center);
+                var lRt = (RectTransform)label.transform;
+                lRt.anchorMin = Vector2.zero;
+                lRt.anchorMax = Vector2.one;
+                lRt.sizeDelta = Vector2.zero;
+                label.fontSize = 9f;
+                return;
+            }
+
+            var dot = SettingsUI.Diamond(chip, "Presence", inLobby ? SettingsTheme.Accent : SettingsTheme.Muted, 6f);
+            dot.rectTransform.anchorMin = dot.rectTransform.anchorMax = new Vector2(0f, 0.5f);
+            dot.rectTransform.anchoredPosition = new Vector2(16f, 0f);
+
+            var driverText = AccertoneUIFactory.CreateText(chip, "Name", driver, BrandTextRole.Title, inLobby ? Color.white : new Color(0.75f, 0.78f, 0.83f));
+            var nRt = (RectTransform)driverText.transform;
+            nRt.anchorMin = nRt.anchorMax = new Vector2(0f, 1f);
+            nRt.pivot = new Vector2(0f, 1f);
+            nRt.anchoredPosition = new Vector2(30f, -6f);
+            nRt.sizeDelta = new Vector2(w - 40f, 18f);
+            driverText.fontSize = 12f;
+            driverText.textWrappingMode = TextWrappingModes.NoWrap;
+            driverText.overflowMode = TextOverflowModes.Ellipsis;
+
+            var st = AccertoneUIFactory.CreateText(chip, "State", state, BrandTextRole.Caption, inLobby ? new Color(0.85f, 0.55f, 1f) : new Color(0.62f, 0.66f, 0.72f));
+            var sRt = (RectTransform)st.transform;
+            sRt.anchorMin = sRt.anchorMax = new Vector2(0f, 0f);
+            sRt.pivot = new Vector2(0f, 0f);
+            sRt.anchoredPosition = new Vector2(30f, 5f);
+            sRt.sizeDelta = new Vector2(w - 40f, 14f);
+            st.fontSize = 9f;
         }
 
         // =========================================================================
@@ -1870,7 +2019,15 @@ namespace Accertone.Play
             vRt.anchorMax = new Vector2(1f, 0.5f);
             vRt.pivot = new Vector2(1f, 0.5f);
             vRt.anchoredPosition = new Vector2(-120f, 0f);
+            // Everything between the title and the button, on one line; long values shrink a little before they clip.
+            float titleWidth = lText.GetPreferredValues(lText.text).x;
+            vRt.sizeDelta = new Vector2(Mathf.Max(120f, boxRt.sizeDelta.x - 120f - 16f - titleWidth - 24f), 24f);
             vText.fontSize = 12f;
+            vText.enableAutoSizing = true;
+            vText.fontSizeMin = 10f;
+            vText.fontSizeMax = 12f;
+            vText.textWrappingMode = TextWrappingModes.NoWrap;
+            vText.overflowMode = TextOverflowModes.Ellipsis;
 
             var stepBtn = AccertoneUIFactory.CreateButton(boxRt, "ChangeBtn", "CHANGE >", new Vector2(90f, 32f), () => onNext?.Invoke());
             var bRt = (RectTransform)stepBtn.transform;

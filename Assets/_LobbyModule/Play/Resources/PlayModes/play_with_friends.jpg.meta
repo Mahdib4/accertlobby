@@ -1,7 +1,10 @@
 fileFormatVersion: 2
 guid: 336eb8efbb2f4a6f98681e0f0c1d5acf
 TextureImporter:
-  internalIDToNameTable: []
+  internalIDToNameTable:
+  - first:
+      213: 8610391855055855958
+    second: play_with_friends_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -162,7 +165,29 @@ TextureImporter:
     forceMaximumCompressionQuality_BC6H_BC7: 0
   spriteSheet:
     serializedVersion: 2
-    sprites: []
+    sprites:
+    - serializedVersion: 2
+      name: play_with_friends_0
+      rect:
+        serializedVersion: 2
+        x: 0
+        y: 0
+        width: 944
+        height: 1680
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6516589b5c14e7770800000000000000
+      internalID: 8610391855055855958
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
     outline: []
     customData: 
     physicsShape: []
