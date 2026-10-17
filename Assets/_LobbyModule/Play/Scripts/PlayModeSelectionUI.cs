@@ -15,14 +15,15 @@ namespace Accertone.Play
 {
     /// <summary>
     /// Master UI for the Accert one Play game-mode selection system.
-    /// Manages the 5 core game modes:
+    /// Manages the 6 core game modes:
     /// 1. Quick Match
     /// 2. Online Multiplayer
     /// 3. Career
     /// 4. Hot Lap
     /// 5. Free Practice
+    /// 6. Play With Friends
     ///
-    /// The selection screen shows the five modes as one row of identical, art-directed cards
+    /// The selection screen shows the modes as one row of identical, art-directed cards
     /// (<see cref="PlayModeCard"/>) over a dark graphite stage lit by slow violet accents. It shares the
     /// Settings screen's 1920×1080 design frame, header and key-prompt footer, keeps the lobby wordmark and
     /// navigation above it, and animates every change of state: screen fade, staggered card entrance,
@@ -74,6 +75,9 @@ namespace Accertone.Play
         [SerializeField] private Sprite m_CareerSprite;
         [SerializeField] private Sprite m_HotLapSprite;
         [SerializeField] private Sprite m_PracticeSprite;
+        [Tooltip("Optional. Falls back to Resources/" + FriendsSpriteResource + " so builds need no scene wiring.")]
+        [SerializeField] private Sprite m_FriendsSprite;
+        const string FriendsSpriteResource = "PlayModes/play_with_friends";
 
         private PlayModeType m_ActiveSubMode = PlayModeType.QuickMatch;
         private bool m_IsInSubPanel = false;
@@ -172,6 +176,8 @@ namespace Accertone.Play
             if (m_PracticeSprite == null)
                 m_PracticeSprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/_LobbyModule/Play/Images/free_practice.jpg");
 #endif
+            if (m_FriendsSprite == null)
+                m_FriendsSprite = Resources.Load<Sprite>(FriendsSpriteResource);
         }
 
         // =========================================================================
@@ -340,7 +346,7 @@ namespace Accertone.Play
             m_GridPromptsGroup.alpha = m_IsInSubPanel ? 0f : 1f;
             float gx = Prompt(grid, 0f, new[] { "←", "→" }, "Select", null);
             gx = Prompt(grid, gx + 28f, new[] { "ENTER" }, "Confirm", null);
-            Prompt(grid, gx + 28f, new[] { "1–5" }, "Jump", null);
+            Prompt(grid, gx + 28f, new[] { "1–" + Mathf.Min(9, m_Cards.Count) }, "Jump", null);
         }
 
         /// <summary>Key-cap prompt in the Settings footer style. Returns the x where the next prompt can start.</summary>
@@ -402,6 +408,12 @@ namespace Accertone.Play
                 "Practice and test car setups", "Unrestricted track session with live telemetry readouts and direct access to full vehicle setup tuning.");
             m_Cards.Add(c5);
 
+            // Card 6: PLAY WITH FRIENDS
+            var c6 = CreateCard(m_CardsContainer, "Card_Friends", PlayModeType.PlayWithFriends, m_FriendsSprite, new Vector2(0.5f, 0.44f),
+                "06", "PRIVATE // INVITE ONLY", "PLAY WITH FRIENDS",
+                "Race your friends", "Invite friends from your list or share a room code, set your own rules and race them head-to-head.");
+            m_Cards.Add(c6);
+
             // Explicit left / right navigation along the row; up reaches the back button.
             for (int i = 0; i < m_Cards.Count; i++)
             {
@@ -454,7 +466,8 @@ namespace Accertone.Play
 
             float availW = size.x - 2f * SideMargin;
             float availH = size.y - RowTop - RowBottomMargin;
-            float w = (availW - 4f * CardGap) / 5f;
+            int count = Mathf.Max(1, m_Cards.Count);
+            float w = (availW - (count - 1) * CardGap) / count;
             float h = w / CardAspect;
             if (h > availH)
             {
@@ -470,7 +483,7 @@ namespace Accertone.Play
             w = Mathf.Floor(w);
             h = Mathf.Floor(h);
             m_CardSize = new Vector2(w, h);
-            m_RowWidth = 5f * w + 4f * CardGap;
+            m_RowWidth = count * w + (count - 1) * CardGap;
             m_RowCenter = new Vector2(0f, size.y * 0.5f - RowTop - availH * 0.5f);
 
             for (int i = 0; i < m_Cards.Count; i++)
@@ -677,6 +690,9 @@ namespace Accertone.Play
                     case PlayModeType.FreePractice:
                         BuildPracticeSubPanel();
                         break;
+                    case PlayModeType.PlayWithFriends:
+                        BuildFriendsSubPanel();
+                        break;
                 }
             }
 
@@ -705,6 +721,7 @@ namespace Accertone.Play
                 case PlayModeType.Career: return "CAREER";
                 case PlayModeType.HotLap: return "HOT LAP";
                 case PlayModeType.FreePractice: return "FREE PRACTICE";
+                case PlayModeType.PlayWithFriends: return "PLAY WITH FRIENDS";
                 default: return "QUICK MATCH";
             }
         }
@@ -824,21 +841,22 @@ namespace Accertone.Play
         private void UpdateFooterCounter()
         {
             if (m_CounterText == null) return;
+            string total = " / " + m_Cards.Count.ToString("00");
             if (m_IsInSubPanel)
             {
-                m_CounterText.text = "0" + ((int)m_ActiveSubMode + 1) + " / 05";
+                m_CounterText.text = ((int)m_ActiveSubMode + 1).ToString("00") + total;
                 m_CounterName.text = ModeTitle(m_ActiveSubMode);
                 m_CounterName.color = SettingsTheme.Silver;
             }
             else if (m_Active != null)
             {
-                m_CounterText.text = m_Active.modeNumber + " / 05";
+                m_CounterText.text = m_Active.modeNumber + total;
                 m_CounterName.text = m_Active.title;
                 m_CounterName.color = SettingsTheme.AccentLight;
             }
             else
             {
-                m_CounterText.text = "— / 05";
+                m_CounterText.text = "—" + total;
                 m_CounterName.text = "Choose a discipline";
                 m_CounterName.color = SettingsTheme.Muted;
             }
@@ -967,7 +985,7 @@ namespace Accertone.Play
             var kb = Keyboard.current;
             if (kb != null)
             {
-                for (int i = 0; i < 5; i++)
+                for (int i = 0; i < m_Cards.Count && i < 9; i++)
                 {
                     if (kb[(Key)((int)Key.Digit1 + i)].wasPressedThisFrame || kb[(Key)((int)Key.Numpad1 + i)].wasPressedThisFrame)
                     {
@@ -1591,6 +1609,208 @@ namespace Accertone.Play
             spRt.anchorMax = new Vector2(0.5f, 0f);
             spRt.pivot = new Vector2(0.5f, 0f);
             spRt.anchoredPosition = new Vector2(0f, 32f);
+        }
+
+        // =========================================================================
+        // SUB-PANEL 6: PLAY WITH FRIENDS
+        // =========================================================================
+        private void BuildFriendsSubPanel()
+        {
+            if (m_BreadcrumbText != null)
+                m_BreadcrumbText.text = "PLAY // PLAY WITH FRIENDS  ·  PRIVATE INVITE-ONLY SESSION";
+
+            m_CurrentSubPanelGo = BeginSubPanel("Panel_Friends");
+            var rootRt = (RectTransform)m_CurrentSubPanelGo.transform;
+            rootRt.anchorMin = Vector2.zero;
+            rootRt.anchorMax = Vector2.one;
+            rootRt.sizeDelta = Vector2.zero;
+
+            var gm = GameModeManager.Instance;
+            var fs = gm != null ? gm.friendSession : new FriendSessionConfig();
+            var friends = gm != null ? gm.friends : new List<FriendEntry>();
+            int online = 0;
+            foreach (var f in friends) if (f.isOnline) online++;
+            int inLobby = gm != null ? gm.FriendsInLobby : 0;
+            int invited = gm != null ? gm.FriendsInvited : 0;
+
+            // Left Box: Friends & room code (760w x 680h)
+            var leftRt = AccertoneUIFactory.CreatePanel(rootRt, "FriendsList", new Vector2(760f, 680f), new Color(0.08f, 0.09f, 0.11f, 0.95f), 12f);
+            leftRt.anchorMin = new Vector2(0f, 0.5f);
+            leftRt.anchorMax = new Vector2(0f, 0.5f);
+            leftRt.pivot = new Vector2(0f, 0.5f);
+            leftRt.anchoredPosition = Vector2.zero;
+
+            var lTitle = AccertoneUIFactory.CreateText(leftRt, "FriendsTitle", "FRIENDS", BrandTextRole.Headline, Color.white);
+            var ltRt = (RectTransform)lTitle.transform;
+            ltRt.anchorMin = new Vector2(0f, 1f);
+            ltRt.anchorMax = new Vector2(1f, 1f);
+            ltRt.pivot = new Vector2(0f, 1f);
+            ltRt.anchoredPosition = new Vector2(28f, -28f);
+            lTitle.fontSize = 20f;
+
+            var lMeta = AccertoneUIFactory.CreateText(leftRt, "FriendsMeta", online + " ONLINE  ·  " + inLobby + " IN LOBBY  ·  " + invited + " INVITED", BrandTextRole.Caption, new Color(0.75f, 0.26f, 1f));
+            var lmRt = (RectTransform)lMeta.transform;
+            lmRt.anchorMin = new Vector2(0f, 1f);
+            lmRt.anchorMax = new Vector2(1f, 1f);
+            lmRt.pivot = new Vector2(0f, 1f);
+            lmRt.anchoredPosition = new Vector2(28f, -56f);
+            lMeta.fontSize = 11f;
+
+            // Room code: friends can also join by typing it in.
+            var codeRt = AccertoneUIFactory.CreatePanel(leftRt, "RoomCode", new Vector2(704f, 72f), new Color(0.12f, 0.14f, 0.18f, 1f), 8f);
+            codeRt.anchorMin = new Vector2(0.5f, 1f);
+            codeRt.anchorMax = new Vector2(0.5f, 1f);
+            codeRt.pivot = new Vector2(0.5f, 1f);
+            codeRt.anchoredPosition = new Vector2(0f, -88f);
+
+            var codeLabel = AccertoneUIFactory.CreateText(codeRt, "CodeLabel", "PRIVATE ROOM CODE", BrandTextRole.Caption, new Color(0.62f, 0.66f, 0.72f));
+            var clRt = (RectTransform)codeLabel.transform;
+            clRt.anchorMin = new Vector2(0f, 1f);
+            clRt.anchorMax = new Vector2(0f, 1f);
+            clRt.pivot = new Vector2(0f, 1f);
+            clRt.anchoredPosition = new Vector2(20f, -12f);
+            clRt.sizeDelta = new Vector2(300f, 16f);
+            codeLabel.fontSize = 11f;
+
+            var codeValue = AccertoneUIFactory.CreateText(codeRt, "CodeValue", fs.roomCode, BrandTextRole.DataLarge, Color.white);
+            var cvRt = (RectTransform)codeValue.transform;
+            cvRt.anchorMin = new Vector2(0f, 0f);
+            cvRt.anchorMax = new Vector2(0f, 0f);
+            cvRt.pivot = new Vector2(0f, 0f);
+            cvRt.anchoredPosition = new Vector2(20f, 8f);
+            cvRt.sizeDelta = new Vector2(300f, 34f);
+            codeValue.fontSize = 26f;
+            codeValue.textWrappingMode = TextWrappingModes.NoWrap;
+
+            Button copyBtn = null;
+            copyBtn = AccertoneUIFactory.CreateButton(codeRt, "CopyCodeBtn", "COPY CODE", new Vector2(150f, 36f), () => {
+                GUIUtility.systemCopyBuffer = fs.roomCode;
+                var label = copyBtn != null ? copyBtn.GetComponentInChildren<TMP_Text>() : null;
+                if (label != null) label.text = "COPIED";
+            });
+            var cbRt = (RectTransform)copyBtn.transform;
+            cbRt.anchorMin = new Vector2(1f, 0.5f);
+            cbRt.anchorMax = new Vector2(1f, 0.5f);
+            cbRt.pivot = new Vector2(1f, 0.5f);
+            cbRt.anchoredPosition = new Vector2(-16f, 0f);
+
+            // Friend rows
+            for (int i = 0; i < friends.Count && i < 7; i++)
+            {
+                int index = i;
+                var friend = friends[i];
+                var rowRt = AccertoneUIFactory.CreatePanel(leftRt, "Friend_" + i, new Vector2(704f, 56f),
+                    friend.hasJoined ? new Color(0.18f, 0.12f, 0.24f, 1f) : new Color(0.10f, 0.12f, 0.14f, 1f), 6f);
+                rowRt.anchorMin = new Vector2(0.5f, 1f);
+                rowRt.anchorMax = new Vector2(0.5f, 1f);
+                rowRt.pivot = new Vector2(0.5f, 1f);
+                rowRt.anchoredPosition = new Vector2(0f, -176f - i * 62f);
+
+                var dot = SettingsUI.Diamond(rowRt, "Presence",
+                    friend.hasJoined ? SettingsTheme.Accent : (friend.isOnline ? SettingsTheme.Positive : SettingsTheme.Muted), 7f);
+                dot.rectTransform.anchorMin = dot.rectTransform.anchorMax = new Vector2(0f, 0.5f);
+                dot.rectTransform.anchoredPosition = new Vector2(22f, 0f);
+
+                var nameText = AccertoneUIFactory.CreateText(rowRt, "Name", friend.gamerTag, BrandTextRole.Title, friend.isOnline ? Color.white : new Color(0.62f, 0.66f, 0.72f));
+                var nRt = (RectTransform)nameText.transform;
+                nRt.anchorMin = new Vector2(0f, 1f);
+                nRt.anchorMax = new Vector2(0f, 1f);
+                nRt.pivot = new Vector2(0f, 1f);
+                nRt.anchoredPosition = new Vector2(40f, -9f);
+                nRt.sizeDelta = new Vector2(420f, 20f);
+                nameText.textWrappingMode = TextWrappingModes.NoWrap;
+                nameText.fontSize = 13f;
+
+                var status = AccertoneUIFactory.CreateText(rowRt, "Status", friend.status + (friend.isOnline ? "  ·  " + friend.ping + " MS" : ""), BrandTextRole.Caption, new Color(0.62f, 0.66f, 0.72f));
+                var sRt = (RectTransform)status.transform;
+                sRt.anchorMin = new Vector2(0f, 0f);
+                sRt.anchorMax = new Vector2(0f, 0f);
+                sRt.pivot = new Vector2(0f, 0f);
+                sRt.anchoredPosition = new Vector2(40f, 8f);
+                sRt.sizeDelta = new Vector2(460f, 18f);
+                status.textWrappingMode = TextWrappingModes.NoWrap;
+                status.fontSize = 10f;
+
+                if (friend.hasJoined || !friend.isOnline)
+                {
+                    var state = AccertoneUIFactory.CreateText(rowRt, "State", friend.hasJoined ? "IN LOBBY" : "OFFLINE", BrandTextRole.Label,
+                        friend.hasJoined ? new Color(0.85f, 0.55f, 1f) : new Color(0.42f, 0.44f, 0.49f), TextAlignmentOptions.Right);
+                    var stRt = (RectTransform)state.transform;
+                    stRt.anchorMin = stRt.anchorMax = new Vector2(1f, 0.5f);
+                    stRt.pivot = new Vector2(1f, 0.5f);
+                    stRt.anchoredPosition = new Vector2(-20f, 0f);
+                    stRt.sizeDelta = new Vector2(150f, 20f);
+                    state.fontSize = 11f;
+                }
+                else
+                {
+                    var inviteBtn = AccertoneUIFactory.CreateButton(rowRt, "InviteBtn", friend.isInvited ? "INVITE SENT" : "INVITE", new Vector2(130f, 34f), () => {
+                        if (gm != null) gm.ToggleFriendInvite(index);
+                        BuildFriendsSubPanel();
+                    }, !friend.isInvited);
+                    var ibRt = (RectTransform)inviteBtn.transform;
+                    ibRt.anchorMin = ibRt.anchorMax = new Vector2(1f, 0.5f);
+                    ibRt.pivot = new Vector2(1f, 0.5f);
+                    ibRt.anchoredPosition = new Vector2(-12f, 0f);
+                }
+            }
+
+            // Right Box: Private session rules (800w x 680h)
+            var rightRt = AccertoneUIFactory.CreatePanel(rootRt, "PrivateSession", new Vector2(800f, 680f), new Color(0.08f, 0.09f, 0.11f, 0.95f), 12f);
+            rightRt.anchorMin = new Vector2(1f, 0.5f);
+            rightRt.anchorMax = new Vector2(1f, 0.5f);
+            rightRt.pivot = new Vector2(1f, 0.5f);
+            rightRt.anchoredPosition = Vector2.zero;
+
+            var rTitle = AccertoneUIFactory.CreateText(rightRt, "SessionTitle", "PRIVATE SESSION", BrandTextRole.Headline, Color.white);
+            var rtRt = (RectTransform)rTitle.transform;
+            rtRt.anchorMin = new Vector2(0f, 1f);
+            rtRt.anchorMax = new Vector2(1f, 1f);
+            rtRt.pivot = new Vector2(0f, 1f);
+            rtRt.anchoredPosition = new Vector2(28f, -28f);
+            rTitle.fontSize = 20f;
+
+            var rMeta = AccertoneUIFactory.CreateText(rightRt, "SessionMeta", "HOST: YOU  ·  " + (inLobby + 1) + " / 20 DRIVERS  ·  YOUR RULES", BrandTextRole.Caption, new Color(0.75f, 0.26f, 1f));
+            var rmRt = (RectTransform)rMeta.transform;
+            rmRt.anchorMin = new Vector2(0f, 1f);
+            rmRt.anchorMax = new Vector2(1f, 1f);
+            rmRt.pivot = new Vector2(0f, 1f);
+            rmRt.anchoredPosition = new Vector2(28f, -56f);
+            rMeta.fontSize = 11f;
+
+            string[] lapOptions = { "3 LAPS (SPRINT)", "5 LAPS (SHORT)", "10 LAPS (MEDIUM)", "15 LAPS (LONG)" };
+            string[] weatherOptions = { "DRY", "OVERCAST", "WET" };
+            string[] assistOptions = { "ALLOWED", "PRO (NO ASSISTS)" };
+
+            CreateConfigStepper(rightRt, "CIRCUIT", FriendSessionConfig.Circuits[Mathf.Clamp(fs.circuitIndex, 0, FriendSessionConfig.Circuits.Length - 1)].ToUpperInvariant(), -90f, () => {
+                fs.circuitIndex = (fs.circuitIndex + 1) % FriendSessionConfig.Circuits.Length;
+                BuildFriendsSubPanel();
+            });
+            CreateConfigStepper(rightRt, "RACE DISTANCE", lapOptions[Mathf.Clamp(fs.lapIndex, 0, lapOptions.Length - 1)], -160f, () => {
+                fs.lapIndex = (fs.lapIndex + 1) % lapOptions.Length;
+                BuildFriendsSubPanel();
+            });
+            CreateConfigStepper(rightRt, "CONDITIONS", weatherOptions[Mathf.Clamp(fs.weatherIndex, 0, weatherOptions.Length - 1)], -230f, () => {
+                fs.weatherIndex = (fs.weatherIndex + 1) % weatherOptions.Length;
+                BuildFriendsSubPanel();
+            });
+            CreateConfigStepper(rightRt, "COLLISIONS", fs.collisions ? "ON" : "OFF (GHOSTED CARS)", -300f, () => {
+                fs.collisions = !fs.collisions;
+                BuildFriendsSubPanel();
+            });
+            CreateConfigStepper(rightRt, "DRIVING ASSISTS", assistOptions[Mathf.Clamp(fs.assistsIndex, 0, assistOptions.Length - 1)], -370f, () => {
+                fs.assistsIndex = (fs.assistsIndex + 1) % assistOptions.Length;
+                BuildFriendsSubPanel();
+            });
+
+            var startBtn = AccertoneUIFactory.CreateButton(rightRt, "StartPrivateBtn", "START PRIVATE RACE  //  " + (inLobby + 1) + " DRIVERS READY", new Vector2(744f, 54f), () => {
+                gm?.LaunchSession(PlayModeType.PlayWithFriends);
+            }, true);
+            var sbRt = (RectTransform)startBtn.transform;
+            sbRt.anchorMin = new Vector2(0.5f, 0f);
+            sbRt.anchorMax = new Vector2(0.5f, 0f);
+            sbRt.pivot = new Vector2(0.5f, 0f);
+            sbRt.anchoredPosition = new Vector2(0f, 32f);
         }
 
         // =========================================================================

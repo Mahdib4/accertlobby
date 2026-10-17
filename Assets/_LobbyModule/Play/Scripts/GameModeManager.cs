@@ -9,7 +9,7 @@ namespace Accertone.Play
 {
     /// <summary>
     /// Master coordinator for Accert one Play game modes:
-    /// Quick Match, Online Multiplayer, Career, Hot Lap, and Free Practice.
+    /// Quick Match, Online Multiplayer, Career, Hot Lap, Free Practice, and Play With Friends.
     /// Manages data persistence, active session configuration, and race deployment.
     /// </summary>
     public class GameModeManager : MonoBehaviour
@@ -37,6 +37,10 @@ namespace Accertone.Play
 
         [Header("Practice Session")]
         public PracticeSessionData practice = new PracticeSessionData();
+
+        [Header("Play With Friends")]
+        public FriendSessionConfig friendSession = new FriendSessionConfig();
+        public List<FriendEntry> friends = new List<FriendEntry>();
 
         public event Action OnStateChanged;
 
@@ -104,6 +108,17 @@ namespace Accertone.Play
                 new CareerRound { roundNumber = 24, grandPrixName = "Abu Dhabi Grand Prix", circuitName = "Yas Marina Circuit", country = "UAE", laps = 58, isCompleted = false, playerFinishPosition = 0, pointsAwarded = 0 }
             };
 
+            // Friends list for private sessions
+            friends = new List<FriendEntry>
+            {
+                new FriendEntry { gamerTag = "VioletVortex", status = "IN YOUR LOBBY", ping = 27, isOnline = true, hasJoined = true },
+                new FriendEntry { gamerTag = "NightApex_07", status = "ONLINE  ·  IN MENUS", ping = 31, isOnline = true, isInvited = true },
+                new FriendEntry { gamerTag = "LateBrake_Leo", status = "ONLINE  ·  IN GARAGE", ping = 44, isOnline = true },
+                new FriendEntry { gamerTag = "Kerb_Hopper", status = "RACING  ·  HOT LAP", ping = 38, isOnline = true },
+                new FriendEntry { gamerTag = "Silverline_88", status = "OFFLINE  ·  LAST SEEN 2H AGO", ping = 0, isOnline = false },
+                new FriendEntry { gamerTag = "Gridlock_Gabi", status = "OFFLINE  ·  LAST SEEN YESTERDAY", ping = 0, isOnline = false }
+            };
+
             // Career Standings Table
             careerStandings = new List<CareerDriverStanding>
             {
@@ -127,6 +142,26 @@ namespace Accertone.Play
             {
                 activeLobbySlots[0].isReady = isLocalPlayerReady;
             }
+            NotifyChanged();
+        }
+
+        /// <summary>Friends already in the private lobby, not counting you.</summary>
+        public int FriendsInLobby
+        {
+            get { int n = 0; foreach (var f in friends) if (f.hasJoined) n++; return n; }
+        }
+
+        public int FriendsInvited
+        {
+            get { int n = 0; foreach (var f in friends) if (f.isInvited && !f.hasJoined) n++; return n; }
+        }
+
+        public void ToggleFriendInvite(int index)
+        {
+            if (index < 0 || index >= friends.Count) return;
+            var f = friends[index];
+            if (!f.isOnline || f.hasJoined) return;
+            f.isInvited = !f.isInvited;
             NotifyChanged();
         }
 
@@ -173,6 +208,10 @@ namespace Accertone.Play
                     break;
                 case PlayModeType.FreePractice:
                     status = "ENTERING FREE PRACTICE RUN // TELEMETRY LINKED";
+                    break;
+                case PlayModeType.PlayWithFriends:
+                    string circuit = FriendSessionConfig.Circuits[Mathf.Clamp(friendSession.circuitIndex, 0, FriendSessionConfig.Circuits.Length - 1)];
+                    status = "STARTING PRIVATE RACE // " + circuit.ToUpperInvariant() + "  ·  " + (FriendsInLobby + 1) + " DRIVERS";
                     break;
             }
 

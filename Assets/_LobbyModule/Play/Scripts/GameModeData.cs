@@ -10,7 +10,8 @@ namespace Accertone.Play
         OnlineMultiplayer,
         Career,
         HotLap,
-        FreePractice
+        FreePractice,
+        PlayWithFriends
     }
 
     [Serializable]
@@ -87,6 +88,33 @@ namespace Accertone.Play
         public float benchmarkS3 = 28.844f;
         public int tireCompoundIndex = 0; // 0=Soft (C5), 1=Medium (C3), 2=Hard (C1)
         public bool ghostEnabled = true;
+    }
+
+    [Serializable]
+    public class FriendEntry
+    {
+        public string gamerTag;
+        public string status;          // shown under the name, e.g. "ONLINE · IN MENUS"
+        public int ping;
+        public bool isOnline;
+        public bool isInvited;
+        public bool hasJoined;         // already in your private lobby
+    }
+
+    [Serializable]
+    public class FriendSessionConfig
+    {
+        public static readonly string[] Circuits =
+        {
+            "Autodromo Valcorsa", "Autodromo Nazionale Monza", "Circuit de Spa-Francorchamps", "Silverstone Circuit", "Suzuka International Racing Course"
+        };
+
+        public string roomCode = "AC-F24K";
+        public int circuitIndex = 0;
+        public int lapIndex = 1;        // 0=3 Laps, 1=5 Laps, 2=10 Laps, 3=15 Laps
+        public int weatherIndex = 0;    // 0=Dry, 1=Overcast, 2=Wet
+        public bool collisions = true;
+        public int assistsIndex = 0;    // 0=Allowed, 1=Pro (no assists)
     }
 
     [Serializable]
