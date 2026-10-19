@@ -66,18 +66,22 @@ namespace Accertone.Garage
             bg.axis = PlayGradient.Axis.Horizontal;
             bg.SetStopCount(4);
             Color g = SettingsTheme.Graphite;
+            // The feather lives in the 40 px outside the panel edge; behind the rows the panel is near-opaque so bright
+            // livery passing behind it never competes with the text.
+            float edge = 40f / (40f + m_Width + PanelBleed);
+            float settle = edge + 48f / (40f + m_Width + PanelBleed);
             if (m_Right)
             {
                 bg.SetStop(0, 0f, SettingsTheme.A(g, 0f));
-                bg.SetStop(1, 0.12f, SettingsTheme.A(g, 0.62f));
-                bg.SetStop(2, 0.4f, SettingsTheme.A(g, 0.82f));
-                bg.SetStop(3, 1f, SettingsTheme.A(g, 0.9f));
+                bg.SetStop(1, edge, SettingsTheme.A(g, 0.78f));
+                bg.SetStop(2, settle, SettingsTheme.A(g, 0.93f));
+                bg.SetStop(3, 1f, SettingsTheme.A(g, 0.95f));
             }
             else
             {
-                bg.SetStop(0, 0f, SettingsTheme.A(g, 0.9f));
-                bg.SetStop(1, 0.6f, SettingsTheme.A(g, 0.82f));
-                bg.SetStop(2, 0.88f, SettingsTheme.A(g, 0.62f));
+                bg.SetStop(0, 0f, SettingsTheme.A(g, 0.95f));
+                bg.SetStop(1, 1f - settle, SettingsTheme.A(g, 0.93f));
+                bg.SetStop(2, 1f - edge, SettingsTheme.A(g, 0.78f));
                 bg.SetStop(3, 1f, SettingsTheme.A(g, 0f));
             }
 

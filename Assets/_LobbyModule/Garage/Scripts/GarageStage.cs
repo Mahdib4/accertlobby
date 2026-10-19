@@ -94,7 +94,8 @@ namespace Accertone.Garage
         class TextMod { public TMPro.TMP_Text text; public float alpha; }
         readonly List<TMPro.TMP_Text> m_Texts = new List<TMPro.TMP_Text>();
         readonly List<TextMod> m_StaticTexts = new List<TextMod>();
-        const float SignDim = 0.05f;
+        // The brand wall sits above the garage framing, so it fades out fully rather than showing cropped letters.
+        const float SignDim = 0f;
         MaterialPropertyBlock m_Block;
         bool m_Located;
 
@@ -551,13 +552,13 @@ namespace Accertone.Garage
             {
                 var r = e.GetComponent<Renderer>();
                 if (r == null || string.IsNullOrEmpty(e.colorProperty)) continue;
-                float scale = 0f;
+                float scale = -1f;
                 if (e.name == "Podium_LEDRing") scale = 1.3f;
                 else if (e.name == "AccentFloorGlow") scale = 1.15f;
                 else if (e.name.StartsWith("LED_Run") || e.name.StartsWith("Ceiling_LightBox")) scale = 0.75f;
                 // The brand wall steps back into the dark so the light belongs to the car.
                 else if (IsWallSign(e.transform)) scale = SignDim;
-                if (scale <= 0f) continue;
+                if (scale < 0f) continue;
                 m_Emissives.Add(new EmissiveMod { renderer = r, property = Shader.PropertyToID(e.colorProperty), scale = scale });
             }
             m_Texts.Clear();
