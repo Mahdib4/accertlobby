@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Accertone.CarSetup;
+using Accertone.Garage;
 using Accertone.Lobby;
 using Accertone.Play;
 using UnityEngine;
@@ -10,8 +11,9 @@ using UnityEngine.InputSystem;
 namespace Accertone.Settings
 {
     /// <summary>
-    /// Routes the lobby tabs between the showroom (HOME), the car setup garage (GARAGE),
-    /// the play game modes screen (PLAY / CAREER / ONLINE), and the settings overlay (SETTINGS).
+    /// Routes the lobby tabs between the showroom (HOME), the garage (GARAGE), the play game modes screen
+    /// (PLAY / CAREER / ONLINE), and the settings overlay (SETTINGS). The engineering sheet (CarSetupUI) is
+    /// reached from the garage's Car Setup page.
     /// </summary>
     public class LobbyNavigationCoordinator : MonoBehaviour
     {
@@ -26,12 +28,16 @@ namespace Accertone.Settings
         public SettingsScreen settingsView;
         public CarSetupUI carSetupView;
         public PlayModeSelectionUI playModeView;
+        public GarageScreen garageView;
 
         /// <summary>True while Settings, Garage, or Play Modes cover the showroom.</summary>
         public static bool OverlayOpen { get; private set; }
 
         const string SettingsId = "settings";
+        const string GarageId = "garage";
+        const int GarageSetupPage = 6;
         int m_CurrentTab;
+        int m_PendingGaragePage = -1;
         int m_IgnoreEscapeFrame = -1;
         bool m_Reverting;
 
@@ -41,6 +47,8 @@ namespace Accertone.Settings
             EnsureScreensCreated();
             EnsureGameModeManagerCreated();
             UpdateRaceActionText();
+            // The car shows its saved livery and setup in the lobby too, not only inside the garage.
+            if (Application.isPlaying) GarageScreen.Boot();
         }
 
         void Start()
@@ -132,8 +140,54 @@ namespace Accertone.Settings
                 playModeView = playGo.AddComponent<PlayModeSelectionUI>();
             }
             playModeView.OnCloseRequested = ReturnToHome;
-            playModeView.OnOpenCarSetupRequested = ShowCarSetupView;
+            playModeView.OnOpenCarSetupRequested = OpenGarageSetup;
             playModeView.gameObject.SetActive(false);
+
+            // 4. Garage
+            if (garageView == null) garageView = canvas.GetComponentInChildren<GarageScreen>(true);
+            if (garageView == null)
+            {
+                var garageGo = new GameObject("Screen_Garage", typeof(RectTransform));
+                garageGo.layer = 5;
+                garageGo.transform.SetParent(canvas.transform, false);
+                garageView = garageGo.AddComponent<GarageScreen>();
+            }
+            garageView.OnCloseRequested = ReturnToHome;
+            garageView.OnOpenEngineeringSheet = ShowCarSetupView;
+            garageView.gameObject.SetActive(false);
+        }
+
+        int GarageTabIndex()
+        {
+            if (navBar == null) return 1;
+            for (int i = 0; i < navBar.tabs.Length; i++) if (navBar.tabs[i].id.ToLowerInvariant() == GarageId) return i;
+            return 1;
+        }
+
+        /// <summary>Opens the garage on its Car Setup page (used by Free Practice's "detailed car setup").</summary>
+        public void OpenGarageSetup()
+        {
+            m_PendingGaragePage = GarageSetupPage;
+            int tab = GarageTabIndex();
+            if (navBar != null && navBar.selectedIndex != tab) navBar.Select(tab);
+            else { m_CurrentTab = tab; ShowGarageView(); }
+        }
+
+        /// <summary>Closes the garage if it is up. Its 3D restore (camera, turntable, driver) animates on its own.</summary>
+        void CloseGarage(bool toHome)
+        {
+            if (garageView == null || !garageView.IsActive) return;
+            garageView.Close(() =>
+            {
+                // Back on HOME (and nothing else opened meanwhile): bring the HUD back now that the camera has landed.
+                bool home = m_CurrentTab == 0 && (settingsView == null || !settingsView.IsOpen) && (playModeView == null || !playModeView.IsOpen) &&
+                            (carSetupView == null || !carSetupView.gameObject.activeSelf) && (garageView == null || !garageView.IsActive);
+                if (toHome && home)
+                {
+                    garageView.RestoreHud();
+                    OverlayOpen = false;
+                }
+            });
         }
 
         int SettingsTabIndex()
@@ -163,7 +217,7 @@ namespace Accertone.Settings
 
         void Route(string id)
         {
-            if (id == "garage") ShowCarSetupView();
+            if (id == GarageId) ShowGarageView();
             else if (id == SettingsId) ShowSettingsView();
             else if (id == "career") ShowCareerView();
             else if (id == "online") ShowOnlineView();
@@ -180,12 +234,34 @@ namespace Accertone.Settings
             if (settingsView != null && settingsView.IsOpen) { settingsView.Hide(); m_IgnoreEscapeFrame = Time.frameCount; }
             if (carSetupView != null) carSetupView.gameObject.SetActive(false);
             if (playModeView != null && playModeView.IsOpen) { playModeView.Close(); m_IgnoreEscapeFrame = Time.frameCount; }
+            if (garageView != null && garageView.IsActive)
+            {
+                // The HUD returns (and lobby input resumes) when the garage camera has landed.
+                m_IgnoreEscapeFrame = Time.frameCount;
+                OverlayOpen = true;
+                CloseGarage(true);
+                return;
+            }
             SetShowroomPanels(true);
             OverlayOpen = false;
         }
 
+        public void ShowGarageView()
+        {
+            if (settingsView != null && settingsView.IsOpen) settingsView.Hide();
+            if (playModeView != null && playModeView.IsOpen) playModeView.Close();
+            if (carSetupView != null) carSetupView.gameObject.SetActive(false);
+            OverlayOpen = true;
+            int page = m_PendingGaragePage;
+            m_PendingGaragePage = -1;
+            // The garage fades the showroom panels out itself, in step with its camera move.
+            if (garageView != null) garageView.Open(page);
+            else SetShowroomPanels(false);
+        }
+
         public void ShowSettingsView()
         {
+            CloseGarage(false);
             if (carSetupView != null) carSetupView.gameObject.SetActive(false);
             if (playModeView != null) playModeView.Close();
             SetShowroomPanels(false);
@@ -195,6 +271,7 @@ namespace Accertone.Settings
 
         public void ShowCarSetupView()
         {
+            CloseGarage(false);
             if (settingsView != null && settingsView.IsOpen) settingsView.Hide();
             if (playModeView != null) playModeView.Close();
             SetShowroomPanels(false);
@@ -204,6 +281,7 @@ namespace Accertone.Settings
 
         public void ShowPlayModeView(PlayModeType mode = PlayModeType.QuickMatch, bool openSubPanel = false)
         {
+            CloseGarage(false);
             if (settingsView != null && settingsView.IsOpen) settingsView.Hide();
             if (carSetupView != null) carSetupView.gameObject.SetActive(false);
             SetShowroomPanels(false);
@@ -240,6 +318,12 @@ namespace Accertone.Settings
             if (!escape || Time.frameCount <= m_IgnoreEscapeFrame + 1) return;
 
             if (settingsView != null && settingsView.IsOpen) return; // settings screen handles its own Esc
+
+            if (garageView != null && garageView.IsActive)
+            {
+                if (garageView.IsOpen) garageView.RequestBack();
+                return;
+            }
 
             if (playModeView != null && playModeView.IsOpen)
             {

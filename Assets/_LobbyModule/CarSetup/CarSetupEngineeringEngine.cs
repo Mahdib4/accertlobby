@@ -42,19 +42,20 @@ namespace Accertone.CarSetup
 
             // Rake enhances diffuser suction up to optimal ~20-25mm rake, then stalls if too steep
             float diffuserRakeBonus = Mathf.Clamp(rake / 20f, 0.8f, 1.25f);
-            float baseAeroBal = (wingRatio * 0.70f + 0.15f) * 100f;
+            // Equal wings sit near 42% front; the wing split moves it within the 35-52% window.
+            float baseAeroBal = (wingRatio * 0.40f + 0.22f) * 100f;
             analysis.aeroBalancePercent = Mathf.Clamp(baseAeroBal + (diffuserRakeBonus - 1f) * 4f, 35.0f, 52.0f);
 
-            // Drag Index (0 to 100)
+            // Drag Index (0 to 100): full wings on both ends reach 100.
             float aeroDrag = (setup.frontWingAngle * 0.45f + setup.rearWingAngle * 0.55f);
-            analysis.dragIndex = Mathf.Clamp(aeroDrag, 5f, 95f);
+            analysis.dragIndex = Mathf.Clamp(aeroDrag * 2f, 5f, 100f);
 
-            // Downforce Index (0 to 100)
-            analysis.downforceIndex = Mathf.Clamp((setup.frontWingAngle * 0.5f + setup.rearWingAngle * 0.5f) * diffuserRakeBonus, 5f, 98f);
+            // Downforce Index (0 to 100): full wings with the best diffuser rake reach 100.
+            analysis.downforceIndex = Mathf.Clamp((setup.frontWingAngle * 0.5f + setup.rearWingAngle * 0.5f) * diffuserRakeBonus * 1.6f, 5f, 100f);
 
             // Estimated Top Speed (km/h & mph)
             // Baseline 355 km/h at Monza trim (low drag), down to ~315 km/h at Monaco trim
-            float topSpeedBase = 360f - (analysis.dragIndex * 0.48f);
+            float topSpeedBase = 360f - (Mathf.Clamp(aeroDrag, 5f, 95f) * 0.48f);
             // Gearing modifier: final drive ratio affects terminal speed
             float gearModifier = (3.40f - setup.finalDriveRatio) * 12f;
             analysis.topSpeedKmh = Mathf.Round(Mathf.Clamp(topSpeedBase + gearModifier, 310f, 362f));
@@ -77,7 +78,8 @@ namespace Accertone.CarSetup
             analysis.tireWearRateIndex = 1.0f + (camberAggression * 0.12f) + (pressureOffset * 0.05f);
 
             // 5. Handling Tendency & Engineering Advice
-            float understeerBias = (analysis.mechanicalBalance - 50f) * 0.6f - (analysis.aeroBalancePercent - 42f) * 1.2f;
+            // Neutral: roll stiffness ~55% front with ~42% front aero (the Balanced preset).
+            float understeerBias = (analysis.mechanicalBalance - 55f) * 0.6f - (analysis.aeroBalancePercent - 42f) * 1.2f;
 
             if (understeerBias > 4.5f)
             {
