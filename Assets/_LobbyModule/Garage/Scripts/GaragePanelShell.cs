@@ -66,22 +66,22 @@ namespace Accertone.Garage
             bg.axis = PlayGradient.Axis.Horizontal;
             bg.SetStopCount(4);
             Color g = SettingsTheme.Graphite;
-            // The feather lives in the 40 px outside the panel edge; behind the rows the panel is near-opaque so bright
-            // livery passing behind it never competes with the text.
+            // The feather lives in the 40 px outside the panel edge; behind the rows the panel is opaque. UI blends in
+            // linear space, so even 95% lets bright livery read through as grey ghosting behind the text.
             float edge = 40f / (40f + m_Width + PanelBleed);
-            float settle = edge + 48f / (40f + m_Width + PanelBleed);
+            float settle = edge + 36f / (40f + m_Width + PanelBleed);
             if (m_Right)
             {
                 bg.SetStop(0, 0f, SettingsTheme.A(g, 0f));
-                bg.SetStop(1, edge, SettingsTheme.A(g, 0.78f));
-                bg.SetStop(2, settle, SettingsTheme.A(g, 0.93f));
-                bg.SetStop(3, 1f, SettingsTheme.A(g, 0.95f));
+                bg.SetStop(1, edge, SettingsTheme.A(g, 0.86f));
+                bg.SetStop(2, settle, SettingsTheme.A(g, 1f));
+                bg.SetStop(3, 1f, SettingsTheme.A(g, 1f));
             }
             else
             {
-                bg.SetStop(0, 0f, SettingsTheme.A(g, 0.95f));
-                bg.SetStop(1, 1f - settle, SettingsTheme.A(g, 0.93f));
-                bg.SetStop(2, 1f - edge, SettingsTheme.A(g, 0.78f));
+                bg.SetStop(0, 0f, SettingsTheme.A(g, 1f));
+                bg.SetStop(1, 1f - settle, SettingsTheme.A(g, 1f));
+                bg.SetStop(2, 1f - edge, SettingsTheme.A(g, 0.86f));
                 bg.SetStop(3, 1f, SettingsTheme.A(g, 0f));
             }
 
