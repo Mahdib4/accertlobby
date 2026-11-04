@@ -54,6 +54,9 @@ namespace Accertone.Garage
         /// <summary>One line on what this category really changes (shown under the title).</summary>
         public abstract string Effect { get; }
         public virtual bool HasReset { get { return true; } }
+        /// <summary>Header tag above the title; null shows the system number ("05 / 08").</summary>
+        public virtual string IndexLabel { get { return null; } }
+        public virtual string ResetLabel { get { return "RESET THIS SYSTEM"; } }
 
         /// <summary>Short status for the menu item ("ROSSO · GLOSS").</summary>
         public abstract string Status();

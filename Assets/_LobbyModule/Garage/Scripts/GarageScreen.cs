@@ -26,7 +26,8 @@ namespace Accertone.Garage
         // How far the car moves away from an open panel (fraction of half the screen width).
         const float PanelFraming = 0.27f;
 
-        enum State { Closed, Entering, Hub, Panel, Exiting }
+        enum State { Closed, Entering, Hub, Panel, Photo, Exiting }
+        const float PhotoPanelWidth = 520f, PhotoTop = 96f, PhotoBottom = 96f, PhotoEdge = 48f;
 
         static readonly string[] s_HudPanels = { "PlayerCard", "SessionPanel", "ChassisInfo", "RaceAction", "InputHints" };
         static readonly string[] s_PartNames = { "BODYWORK", "FRONT WING", "REAR WING · DRS", "SUSPENSION", "FRONT BRAKE", "FRONT TYRE", "POWER UNIT", "SURVIVAL CELL", "AC-26" };
@@ -62,6 +63,19 @@ namespace Accertone.Garage
         float m_ShotAt = -1f;
         GarageControl m_PendingShotControl;
 
+        // Photo mode.
+        GaragePhotoPanel m_PhotoPanel;
+        GaragePanelShell m_PhotoShell;
+        GaragePhotoOverlay m_PhotoOverlay;
+        GaragePhotoMode m_PhotoMode;
+        GarageButton m_PhotoButton;
+        bool m_PhotoPanelHidden;
+        float m_PhotoCaptureReady, m_PhotoRefreshAt;
+        Vector4 m_PhotoSeen;
+        float m_PhotoSeenFocal;
+        class HiddenGroup { public CanvasGroup group; public float alpha; public bool raycasts; }
+        readonly List<HiddenGroup> m_PhotoHidden = new List<HiddenGroup>();
+
         // Timeline.
         float m_OpenTime, m_InputReady;
         int m_PendingPage = -1;
@@ -79,6 +93,7 @@ namespace Accertone.Garage
         public bool IsOpen { get { return m_State != State.Closed && m_State != State.Exiting; } }
         public bool IsActive { get { return m_State != State.Closed; } }
         public bool PanelOpen { get { return m_State == State.Panel; } }
+        public bool PhotoOpen { get { return m_State == State.Photo; } }
 
         // =====================================================================================================
         // LIFECYCLE
@@ -87,6 +102,7 @@ namespace Accertone.Garage
         static void ResetStatics()
         {
             GarageSession.ResetStatics();
+            GarageNavigationKeys.ResetStatics();
         }
 
         /// <summary>Called when the lobby starts: applies the saved Garage state to the car straight away.</summary>
@@ -98,6 +114,11 @@ namespace Accertone.Garage
 
         public void Open(int page = -1)
         {
+            if (m_State == State.Photo)
+            {
+                if (page >= 0) { ClosePhoto(); OpenPanel(page); }
+                return;
+            }
             if (m_State == State.Entering || m_State == State.Hub || m_State == State.Panel)
             {
                 if (page >= 0) OpenPanel(page);
@@ -140,6 +161,7 @@ namespace Accertone.Garage
             RefreshStatuses();
             m_Stage.Enter();
             m_Stage.SetFraming(0f);
+            GarageNavigationKeys.Suppress();
             GarageTheme.PlaySound(UiSound.Category);
         }
 
@@ -158,6 +180,13 @@ namespace Accertone.Garage
                 m_Shell = null;
             }
             m_PanelIndex = -1;
+            if (m_PhotoShell != null)
+            {
+                m_PhotoPanel.OnClose();
+                m_PhotoShell.Hide();
+                m_PhotoShell = null;
+            }
+            if (m_PhotoOverlay != null) m_PhotoOverlay.SetVisible(false);
             for (int i = 0; i < 8; i++) { m_Items[i].Hide((3 - i % 4) * 0.03f); m_Items[i].SetActiveState(false); }
             m_HeaderT = m_FooterT = m_FrameT = m_InspectT = 0f;
             m_CalloutT = 0f;
@@ -172,6 +201,8 @@ namespace Accertone.Garage
         void FinishClose()
         {
             m_State = State.Closed;
+            GarageNavigationKeys.Restore();
+            RestorePhotoHidden();
             if (m_OldShell != null) { Destroy(m_OldShell.gameObject); m_OldShell = null; }
             if (m_Shades != null) m_Shades.alpha = 1f;
             m_HudFade = m_HudFadeTarget = 1f;
@@ -203,6 +234,7 @@ namespace Accertone.Garage
         /// <summary>Back one level: panel → systems → lobby.</summary>
         public void RequestBack()
         {
+            if (m_State == State.Photo) { ClosePhoto(); return; }
             if (m_State == State.Panel) { ClosePanel(); return; }
             if (m_State == State.Hub || m_State == State.Entering)
             {
@@ -276,12 +308,20 @@ namespace Accertone.Garage
 
             BuildFrame();
             BuildCallout();
+            // Photo Mode's mask and guides sit under the panels; its read-outs, flash and saved card over everything.
+            var photoUnder = SettingsUI.Rect("PhotoGuides", m_Root);
+            SettingsUI.Stretch(photoUnder);
             m_PanelHost = SettingsUI.Rect("Panels", m_Root);
             SettingsUI.Stretch(m_PanelHost);
             BuildColumns();
             BuildHeader();
             BuildInspectBar();
             BuildFooter();
+            var photoOver = SettingsUI.Rect("PhotoHud", m_Root);
+            SettingsUI.Stretch(photoOver);
+            m_PhotoOverlay = photoOver.gameObject.AddComponent<GaragePhotoOverlay>();
+            m_PhotoOverlay.Build(photoUnder, photoOver);
+            m_PhotoPanel = new GaragePhotoPanel { screen = this };
         }
 
         void BuildHeader()
@@ -317,6 +357,10 @@ namespace Accertone.Garage
                 if (m_State == State.Panel) ClosePanel();
                 else RequestBack();
             };
+
+            m_PhotoButton = GarageButton.Create(m_Header, "PHOTO MODE", 176f, OpenPhoto, false, false, GarageEffect.Spec, GarageIconKind.Camera, 38f);
+            SettingsUI.AtRight((RectTransform)m_PhotoButton.transform, SideMargin + 232f + 12f, 170f, 176f, 38f);
+            m_PhotoButton.navigation = new Navigation { mode = Navigation.Mode.None };
         }
 
         void BuildColumns()
@@ -456,7 +500,8 @@ namespace Accertone.Garage
             x = Prompt(x, new[] { "Q", "E" }, "SYSTEM");
             x = Prompt(x, new[] { "A", "D" }, "ROTATE");
             x = Prompt(x, new[] { "V" }, "VIEW");
-            Prompt(x, new[] { "1–8" }, "JUMP");
+            x = Prompt(x, new[] { "1–8" }, "JUMP");
+            Prompt(x, new[] { "P" }, "PHOTO");
 
             m_SaveDot = SettingsUI.Diamond(m_Footer, "SaveDot", SettingsTheme.Positive, 6f);
             m_SaveDot.rectTransform.anchorMin = m_SaveDot.rectTransform.anchorMax = new Vector2(1f, 0f);
@@ -579,6 +624,7 @@ namespace Accertone.Garage
         /// <summary>A control took focus: point the target at its part and, after a short pause, move the camera there.</summary>
         public void OnControlFocused(GarageControl control)
         {
+            if (m_State == State.Photo) return;
             m_PendingShotControl = control;
             m_ShotAt = Time.unscaledTime + 0.22f;
             m_CalloutT = 1f;
@@ -606,6 +652,193 @@ namespace Accertone.Garage
             m_Breadcrumb.text = m_PanelIndex >= 0
                 ? "GARAGE  //  " + (m_PanelIndex + 1).ToString("00") + "  " + m_Panels[m_PanelIndex].Title.ToUpperInvariant()
                 : "GARAGE  //  SELECT A SYSTEM  ·  " + "AC-26 ON THE DISPLAY TURNTABLE";
+        }
+
+        // =====================================================================================================
+        // PHOTO MODE
+        // =====================================================================================================
+        /// <summary>Clears the garage furniture, hands the camera to the photo orbit and opens the photo panel.</summary>
+        public void OpenPhoto()
+        {
+            if (m_State != State.Hub && m_State != State.Panel) return;
+            if (Time.unscaledTime < m_InputReady || m_Stage == null) return;
+            if (m_Shell != null)
+            {
+                m_Panels[m_PanelIndex].OnClose();
+                if (m_OldShell != null) Destroy(m_OldShell.gameObject);
+                m_OldShell = m_Shell;
+                m_OldShell.Hide();
+                m_Shell = null;
+            }
+            m_PanelIndex = -1;
+            m_State = State.Photo;
+            for (int i = 0; i < 8; i++) { m_Items[i].Hide((i % 4) * 0.025f); m_Items[i].SetActiveState(false); }
+            if (m_PhotoMode == null) m_PhotoMode = GaragePhotoMode.Ensure(m_Stage.gameObject);
+            m_PhotoMode.Captured = OnPhotoCaptured;
+            m_PhotoMode.Begin();
+            m_Stage.SetFraming(0f);
+            m_Stage.BeginPhoto();
+            CollectPhotoHidden();
+            m_PhotoPanelHidden = false;
+            m_PhotoShell = GaragePanelShell.Create(m_PanelHost, m_PhotoPanel, 8, false, PhotoPanelWidth, PhotoTop, PhotoBottom, PhotoEdge, PanelPad, this);
+            m_PhotoPanel.OnOpen();
+            m_PhotoPanel.Refresh();
+            m_PhotoOverlay.SetVisible(true);
+            m_CalloutT = 0f;
+            GarageTheme.PlaySound(UiSound.Category);
+            m_PhotoShell.FocusFirst();
+        }
+
+        public void ClosePhoto()
+        {
+            if (m_State != State.Photo) return;
+            m_PhotoPanel.OnClose();
+            if (m_PhotoShell != null) { m_PhotoShell.Hide(); m_PhotoShell = null; }
+            m_PhotoOverlay.SetVisible(false);
+            m_Stage.EndPhoto();
+            m_State = State.Hub;
+            for (int i = 0; i < 8; i++)
+            {
+                m_Items[i].SetRail(false);
+                m_Items[i].SetActiveState(false);
+                m_Items[i].Show(0.2f + (i % 4) * 0.05f + (i >= 4 ? 0.025f : 0f));
+            }
+            var hero = GarageStage.HeroShot();
+            if (!AccertoneMotion.CameraMotion) hero.spin = false;
+            m_Stage.SetShot(hero);
+            m_Stage.SetFraming(0f);
+            m_View = -1;
+            SetBreadcrumb();
+            RefreshStatuses();
+            GarageTheme.PlaySound(UiSound.Back);
+            if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
+        }
+
+        public void CapturePhoto()
+        {
+            if (m_State != State.Photo || m_PhotoMode == null || m_PhotoMode.Busy) return;
+            if (Time.unscaledTime < m_PhotoCaptureReady) return;
+            m_PhotoCaptureReady = Time.unscaledTime + 0.4f;
+            if (!m_PhotoMode.Capture(m_Stage.Camera)) return;
+            m_PhotoOverlay.Flash();
+            GarageTheme.PlaySound(UiSound.Confirm);
+        }
+
+        void OnPhotoCaptured(GaragePhotoMode.Result result)
+        {
+            if (m_PhotoOverlay != null) m_PhotoOverlay.ShowResult(result, m_PhotoMode != null ? m_PhotoMode.Thumbnail : null);
+            if (!result.ok) GarageTheme.PlaySound(UiSound.Error);
+        }
+
+        void TogglePhotoPanel()
+        {
+            if (m_PhotoShell == null) return;
+            m_PhotoPanelHidden = !m_PhotoPanelHidden;
+            m_PhotoShell.SetCollapsed(m_PhotoPanelHidden);
+            var es = EventSystem.current;
+            if (m_PhotoPanelHidden) { if (es != null) es.SetSelectedGameObject(null); }
+            else m_PhotoShell.FocusFirst();
+            GarageTheme.PlaySound(UiSound.Change);
+        }
+
+        /// <summary>The rest of the lobby UI (logo, tabs) steps aside in Photo Mode so the viewfinder shows the frame.</summary>
+        void CollectPhotoHidden()
+        {
+            RestorePhotoHidden();
+            var canvas = transform.parent;
+            if (canvas == null) return;
+            for (int i = 0; i < canvas.childCount; i++)
+            {
+                var child = canvas.GetChild(i);
+                if (child == transform || !child.gameObject.activeSelf || child.name == "Backdrop_Shades") continue;
+                var g = child.GetComponent<CanvasGroup>();
+                if (g == null) g = child.gameObject.AddComponent<CanvasGroup>();
+                m_PhotoHidden.Add(new HiddenGroup { group = g, alpha = g.alpha, raycasts = g.blocksRaycasts });
+            }
+        }
+
+        void RestorePhotoHidden()
+        {
+            foreach (var h in m_PhotoHidden)
+            {
+                if (h.group == null) continue;
+                h.group.alpha = h.alpha;
+                h.group.blocksRaycasts = h.raycasts;
+            }
+            m_PhotoHidden.Clear();
+        }
+
+        void UpdatePhotoHidden()
+        {
+            if (m_PhotoHidden.Count == 0) return;
+            float pw = m_Stage != null ? m_Stage.PhotoWeight : 0f;
+            float a = 1f - pw * pw * (3f - 2f * pw);
+            foreach (var h in m_PhotoHidden)
+            {
+                if (h.group == null) continue;
+                h.group.alpha = h.alpha * a;
+                h.group.blocksRaycasts = h.raycasts && a > 0.5f;
+            }
+            if (m_State != State.Photo && pw <= 0f) RestorePhotoHidden();
+        }
+
+        void HandlePhotoInput()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            var pad = Gamepad.current;
+            var s = GaragePhotoMode.Settings;
+            float dt = Time.unscaledDeltaTime;
+            float orbitX = 0f, orbitY = 0f, dolly = 0f, lens = 0f, roll = 0f;
+            if (kb != null)
+            {
+                if (kb.aKey.isPressed) orbitX += 1f;
+                if (kb.dKey.isPressed) orbitX -= 1f;
+                if (kb.wKey.isPressed) orbitY += 1f;
+                if (kb.sKey.isPressed) orbitY -= 1f;
+                if (kb.rKey.isPressed) dolly += 1f;
+                if (kb.fKey.isPressed) dolly -= 1f;
+                if (kb.xKey.isPressed) lens += 1f;
+                if (kb.zKey.isPressed) lens -= 1f;
+                if (kb.eKey.isPressed) roll += 1f;
+                if (kb.qKey.isPressed) roll -= 1f;
+                if (kb.spaceKey.wasPressedThisFrame) CapturePhoto();
+                if (kb.hKey.wasPressedThisFrame) TogglePhotoPanel();
+                if (kb.gKey.wasPressedThisFrame) { s.guides = (PhotoGuides)(((int)s.guides + 1) % 3); m_PhotoPanel.Refresh(); }
+            }
+            if (pad != null)
+            {
+                if (pad.buttonEast.wasPressedThisFrame) { ClosePhoto(); return; }
+                Vector2 rs = pad.rightStick.ReadValue();
+                if (rs.sqrMagnitude > 0.04f) { orbitX -= rs.x; orbitY += rs.y; }
+                dolly += pad.rightTrigger.ReadValue() - pad.leftTrigger.ReadValue();
+                if (pad.rightShoulder.isPressed) lens += 1f;
+                if (pad.leftShoulder.isPressed) lens -= 1f;
+                if (pad.buttonWest.wasPressedThisFrame) CapturePhoto();
+                if (pad.buttonNorth.wasPressedThisFrame) TogglePhotoPanel();
+            }
+            if (orbitX != 0f || orbitY != 0f)
+            {
+                s.yaw = Mathf.Repeat(s.yaw + orbitX * 70f * dt, 360f);
+                s.pitch = Mathf.Clamp(s.pitch + orbitY * 40f * dt, GaragePhotoSettings.MinPitch, GaragePhotoSettings.MaxPitch);
+            }
+            if (dolly != 0f) s.distance = Mathf.Clamp(s.distance * Mathf.Exp(-dolly * 0.9f * dt), GaragePhotoSettings.MinDistance, GaragePhotoSettings.MaxDistance);
+            if (lens != 0f) s.focal = Mathf.Clamp(s.focal * Mathf.Exp(lens * 0.8f * dt), GaragePhotoSettings.MinFocal, GaragePhotoSettings.MaxFocal);
+            if (roll != 0f) s.roll = Mathf.Clamp(s.roll + roll * 20f * dt, -25f, 25f);
+#endif
+        }
+
+        /// <summary>Keeps the camera sliders in step with mouse / key / stick moves, a few times a second.</summary>
+        void SyncPhotoPanel(float now)
+        {
+            if (m_PhotoShell == null || now < m_PhotoRefreshAt) return;
+            m_PhotoRefreshAt = now + 0.12f;
+            var s = GaragePhotoMode.Settings;
+            var seen = new Vector4(s.yaw, s.pitch, s.distance, s.roll);
+            if (seen == m_PhotoSeen && Mathf.Approximately(s.focal, m_PhotoSeenFocal)) return;
+            m_PhotoSeen = seen;
+            m_PhotoSeenFocal = s.focal;
+            m_PhotoPanel.Refresh();
         }
 
         // =====================================================================================================
@@ -664,16 +897,23 @@ namespace Accertone.Garage
             if (m_Shades != null)
             {
                 float w = m_Stage != null ? m_Stage.Weight : 0f;
-                m_Shades.alpha = Mathf.Lerp(1f, 0.52f, w);
+                float pw = m_Stage != null ? m_Stage.PhotoWeight : 0f;
+                // The side shades are screen furniture; in Photo Mode the viewfinder shows exactly what is captured.
+                m_Shades.alpha = Mathf.Lerp(1f, Mathf.Lerp(0.52f, 0f, pw), w);
             }
 
             float k = GarageTheme.Approach(9f);
-            m_HeaderShow = Mathf.Lerp(m_HeaderShow, m_HeaderT, k);
-            m_FooterShow = Mathf.Lerp(m_FooterShow, m_FooterT, k);
-            m_FrameShow = Mathf.Lerp(m_FrameShow, m_FrameT, GarageTheme.Approach(6f));
-            m_InspectShow = Mathf.Lerp(m_InspectShow, m_State == State.Panel ? 0f : m_InspectT, k);
-            if (AccertoneMotion.Scale <= 0.01f) { m_HeaderShow = m_HeaderT; m_FooterShow = m_FooterT; m_FrameShow = m_FrameT; m_InspectShow = m_State == State.Panel ? 0f : m_InspectT; }
+            bool photo = m_State == State.Photo;
+            float headerT = photo ? 0f : m_HeaderT, footerT = photo ? 0f : m_FooterT, frameT = photo ? 0f : m_FrameT;
+            float inspectT = m_State == State.Panel || photo ? 0f : m_InspectT;
+            m_HeaderShow = Mathf.Lerp(m_HeaderShow, headerT, k);
+            m_FooterShow = Mathf.Lerp(m_FooterShow, footerT, k);
+            m_FrameShow = Mathf.Lerp(m_FrameShow, frameT, GarageTheme.Approach(6f));
+            m_InspectShow = Mathf.Lerp(m_InspectShow, inspectT, k);
+            if (AccertoneMotion.Scale <= 0.01f) { m_HeaderShow = headerT; m_FooterShow = footerT; m_FrameShow = frameT; m_InspectShow = inspectT; }
             m_HeaderGroup.alpha = m_HeaderShow;
+            m_HeaderGroup.blocksRaycasts = m_HeaderShow > 0.5f;
+            m_HeaderGroup.interactable = m_HeaderShow > 0.5f;
             m_Header.anchoredPosition = new Vector2(-14f * (1f - m_HeaderShow), 0f);
             m_FooterGroup.alpha = m_FooterShow;
             m_InspectGroup.alpha = m_InspectShow;
@@ -681,7 +921,9 @@ namespace Accertone.Garage
             m_InspectBar.anchoredPosition = new Vector2(0f, 104f - 12f * (1f - m_InspectShow));
 
             UpdateSaveStatus(session);
+            UpdatePhotoHidden();
             HandleInput(now);
+            if (m_State == State.Photo) SyncPhotoPanel(now);
 
             if (m_PendingShotControl != null && now >= m_ShotAt && m_State == State.Panel)
             {
@@ -696,6 +938,12 @@ namespace Accertone.Garage
             if (m_State == State.Closed || m_Stage == null) return;
             UpdateFrame();
             UpdateCallout();
+        }
+
+        void OnDestroy()
+        {
+            // Play mode can stop with the garage open; the UI keys must not stay remapped.
+            GarageNavigationKeys.Restore();
         }
 
         void UpdateFrame()
@@ -834,6 +1082,7 @@ namespace Accertone.Garage
         void HandleInput(float now)
         {
             if (m_State == State.Exiting || m_State == State.Closed) return;
+            if (m_State == State.Photo) { HandlePhotoInput(); return; }
             float rotate = 0f;
 #if ENABLE_INPUT_SYSTEM
             var kb = Keyboard.current;
@@ -852,6 +1101,7 @@ namespace Accertone.Garage
             m_Stage.Rotate(rotate);
             if (now < m_InputReady) return;
 
+            if ((kb != null && kb.pKey.wasPressedThisFrame) || (pad != null && pad.selectButton.wasPressedThisFrame)) { OpenPhoto(); return; }
             if ((kb != null && kb.qKey.wasPressedThisFrame) || (pad != null && pad.leftShoulder.wasPressedThisFrame)) StepPanel(-1);
             if ((kb != null && kb.eKey.wasPressedThisFrame) || (pad != null && pad.rightShoulder.wasPressedThisFrame)) StepPanel(1);
             if ((kb != null && kb.vKey.wasPressedThisFrame) || (pad != null && pad.buttonNorth.wasPressedThisFrame))
@@ -896,6 +1146,8 @@ namespace Accertone.Garage
         public void OnBeginDrag(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left || GarageStage.Instance == null) return;
+            // In Photo Mode a drag orbits the camera instead of turning the platform.
+            if (GarageStage.Instance.InPhoto) return;
             GarageStage.Instance.BeginDrag();
         }
 
@@ -904,19 +1156,22 @@ namespace Accertone.Garage
             if (eventData.button != PointerEventData.InputButton.Left || GarageStage.Instance == null) return;
             // Pixels in reference (1080p) units so the feel is the same at any resolution.
             float scale = Screen.height > 0 ? 1080f / Screen.height : 1f;
+            if (GarageStage.Instance.InPhoto) { GarageStage.Instance.PhotoOrbit(eventData.delta.x * scale, eventData.delta.y * scale); return; }
             GarageStage.Instance.Drag(eventData.delta.x * scale);
         }
 
         public void OnEndDrag(PointerEventData eventData)
         {
-            if (GarageStage.Instance != null) GarageStage.Instance.EndDrag();
+            if (GarageStage.Instance != null && !GarageStage.Instance.InPhoto) GarageStage.Instance.EndDrag();
         }
 
         public void OnScroll(PointerEventData eventData)
         {
             if (GarageStage.Instance == null) return;
             float d = eventData.scrollDelta.y;
-            if (Mathf.Abs(d) > 0.01f) GarageStage.Instance.Zoom(Mathf.Sign(d));
+            if (Mathf.Abs(d) < 0.01f) return;
+            if (GarageStage.Instance.InPhoto) GarageStage.Instance.PhotoDolly(Mathf.Sign(d));
+            else GarageStage.Instance.Zoom(Mathf.Sign(d));
         }
     }
 
@@ -944,6 +1199,61 @@ namespace Accertone.Garage
             if (Time.unscaledTime < m_Until) return;
             if (m_Reveal != null) m_Reveal.delay = m_Original;
             Destroy(this);
+        }
+    }
+    /// <summary>
+    /// While the Garage is open W / A / S / D drive the camera, so they come off the UI "move" action for that time
+    /// (arrows, d-pad and stick still navigate). Without this, turning the car also moved focus and nudged sliders.
+    /// </summary>
+    static class GarageNavigationKeys
+    {
+#if ENABLE_INPUT_SYSTEM
+        static InputAction s_Action;
+        static readonly List<int> s_Indices = new List<int>();
+        static readonly string[] s_Keys = { "<Keyboard>/w", "<Keyboard>/a", "<Keyboard>/s", "<Keyboard>/d" };
+#endif
+
+        public static void Suppress()
+        {
+#if ENABLE_INPUT_SYSTEM
+            if (s_Action != null) return;
+            var es = EventSystem.current;
+            var module = es != null ? es.GetComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>() : null;
+            var action = module != null && module.move != null ? module.move.action : null;
+            if (action == null) return;
+            var bindings = action.bindings;
+            for (int i = 0; i < bindings.Count; i++)
+            {
+                string path = bindings[i].path;
+                if (string.IsNullOrEmpty(path)) continue;
+                foreach (var key in s_Keys)
+                {
+                    if (!string.Equals(path, key, StringComparison.OrdinalIgnoreCase)) continue;
+                    action.ApplyBindingOverride(i, "");
+                    s_Indices.Add(i);
+                    break;
+                }
+            }
+            if (s_Indices.Count > 0) s_Action = action;
+#endif
+        }
+
+        public static void Restore()
+        {
+#if ENABLE_INPUT_SYSTEM
+            if (s_Action == null) return;
+            foreach (int i in s_Indices) if (i < s_Action.bindings.Count) s_Action.RemoveBindingOverride(i);
+            s_Indices.Clear();
+            s_Action = null;
+#endif
+        }
+
+        public static void ResetStatics()
+        {
+#if ENABLE_INPUT_SYSTEM
+            s_Action = null;
+            s_Indices.Clear();
+#endif
         }
     }
 }

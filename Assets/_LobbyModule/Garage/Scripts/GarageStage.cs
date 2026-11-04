@@ -84,11 +84,27 @@ namespace Accertone.Garage
         bool m_ShotInit;
         float m_LobbyFov;
 
+        // Photo mode: a free orbit camera that takes over from the garage shot by its own weight. Leaving, it flies
+        // back along the orbit to the garage camera before handing over, so it never cuts through the car.
+        bool m_Photo, m_PhotoInit, m_PhotoLeaving;
+        float m_PhotoWeight, m_PhotoFrom, m_PhotoTo, m_PhotoStart, m_PhotoDuration, m_PhotoLeaveAt;
+        float m_PYaw, m_PPitch, m_PDistance, m_PFocal = 45f, m_PRoll;
+        float m_PYawVel, m_PPitchVel, m_PDistanceVel, m_PFocalVel, m_PRollVel;
+        Vector3 m_PPivot, m_PPivotVel;
+        // Showroom interior (world space, inset from the walls) the photo camera stays inside.
+        Bounds m_Room;
+        bool m_HasRoom;
+
         // Lighting.
-        class LightMod { public Light light; public float garageScale; public bool powered; public float baseIntensity; }
+        class LightMod { public Light light; public float garageScale; public bool powered, wall; public float baseIntensity; }
         readonly List<LightMod> m_Lights = new List<LightMod>();
         readonly List<Light> m_GarageLights = new List<Light>();
         readonly List<float> m_GarageLightBase = new List<float>();
+        readonly List<Color> m_GarageLightColor = new List<Color>();
+        // Photo looks: garage light multipliers and colours, eased toward the active look.
+        readonly float[] m_LookScale = { 1f, 1f, 1f };
+        readonly Color[] m_LookColor = { Color.white, Color.white, Color.white };
+        float m_LookBackdrop = 1f;
         class EmissiveMod { public Renderer renderer; public int property; public float scale; }
         readonly List<EmissiveMod> m_Emissives = new List<EmissiveMod>();
         class TextMod { public TMPro.TMP_Text text; public float alpha; }
@@ -111,6 +127,13 @@ namespace Accertone.Garage
         public float CurrentView { get; private set; }
         public float SpinSpeed { get { return m_YawVelocity; } }
         public GarageShot Shot { get { return m_Shot; } }
+        /// <summary>0 = garage camera, 1 = photo camera (eased).</summary>
+        public float PhotoWeight { get { return m_PhotoWeight; } }
+        public bool InPhoto { get { return m_Photo; } }
+        /// <summary>Distance from the photo camera to its target (metres), for auto focus.</summary>
+        public float PhotoFocusDistance { get; private set; }
+        /// <summary>The photo lens as it is now (mm), eased toward the setting.</summary>
+        public float PhotoFocal { get { return m_PFocal; } }
 
         public static GarageStage Ensure()
         {
@@ -158,6 +181,8 @@ namespace Accertone.Garage
                     if (t.name == "DriverSpinner") { m_DriverSpinner = t; break; }
             }
             CollectLighting();
+            FindRoom();
+            GaragePhotoMode.Ensure(gameObject);
             m_Shot = HeroShot();
             if (m_Podium != null) m_Yaw = m_Podium.localEulerAngles.y;
         }
@@ -209,6 +234,12 @@ namespace Accertone.Garage
             m_Dragging = false;
             m_OnExited = onExited;
             if (m_CarRig != null) { m_CarRig.SetDrsPreview(false); m_CarRig.SetBrakeHeat(0f, 0f); }
+            if (m_Photo || m_PhotoWeight > 0f)
+            {
+                m_Photo = false;
+                m_PhotoLeaving = false;
+                StartPhotoWeight(0f, 0.6f);
+            }
             StartWeight(0f, 1.25f);
             StartLift(0f, 0.45f, 0.85f);
         }
@@ -321,6 +352,233 @@ namespace Accertone.Garage
             m_ZoomTarget = Mathf.Clamp(m_ZoomTarget * Mathf.Pow(0.92f, steps), 0.78f, 1.18f);
         }
 
+        // =====================================================================================================
+        // PHOTO MODE
+        // =====================================================================================================
+        /// <summary>Hands the camera to the photo orbit, starting exactly where the camera is now.</summary>
+        public void BeginPhoto()
+        {
+            Locate();
+            if (m_Camera == null) return;
+            var s = GaragePhotoMode.Settings;
+            bool fresh = !m_Photo && m_PhotoWeight <= 0.001f;
+            m_Photo = true;
+            m_PhotoLeaving = false;
+            m_Presenting = false;
+            StartPhotoWeight(1f, 0.6f);
+            if (!fresh) return;
+            Vector3 pivot = PhotoPivot(s);
+            Vector3 off = m_Camera.transform.position - pivot;
+            float d = Mathf.Max(0.01f, off.magnitude);
+            s.distance = Mathf.Clamp(d, GaragePhotoSettings.MinDistance, GaragePhotoSettings.MaxDistance);
+            s.yaw = Mathf.Repeat(Mathf.Atan2(off.x, off.z) * Mathf.Rad2Deg, 360f);
+            s.pitch = Mathf.Clamp(Mathf.Asin(Mathf.Clamp(off.y / d, -1f, 1f)) * Mathf.Rad2Deg, GaragePhotoSettings.MinPitch, GaragePhotoSettings.MaxPitch);
+            s.focal = Mathf.Clamp(Mathf.Round(GaragePhotoSettings.FocalFromFov(m_Camera.fieldOfView)), GaragePhotoSettings.MinFocal, GaragePhotoSettings.MaxFocal);
+            s.roll = 0f;
+            m_PhotoInit = false;
+        }
+
+        /// <summary>Flies the photo camera back to the garage shot, then hands over.</summary>
+        public void EndPhoto()
+        {
+            if (!m_Photo) return;
+            m_Photo = false;
+            m_PhotoLeaving = true;
+            m_PhotoLeaveAt = Time.unscaledTime;
+        }
+
+        /// <summary>Drag in reference pixels: right orbits the camera around the car, up looks from lower.</summary>
+        public void PhotoOrbit(float dx, float dy)
+        {
+            var s = GaragePhotoMode.Settings;
+            s.yaw = Mathf.Repeat(s.yaw + dx * 0.22f, 360f);
+            s.pitch = Mathf.Clamp(s.pitch - dy * 0.16f, GaragePhotoSettings.MinPitch, GaragePhotoSettings.MaxPitch);
+        }
+
+        public void PhotoDolly(float steps)
+        {
+            var s = GaragePhotoMode.Settings;
+            s.distance = Mathf.Clamp(s.distance * Mathf.Pow(0.93f, steps), GaragePhotoSettings.MinDistance, GaragePhotoSettings.MaxDistance);
+        }
+
+        /// <summary>Which side of the car the camera is on (car-local X sign).</summary>
+        public float CameraSideOfCar()
+        {
+            Locate();
+            if (m_Car == null || m_Camera == null) return -1f;
+            return m_Car.InverseTransformPoint(m_Camera.transform.position).x >= 0f ? 1f : -1f;
+        }
+
+        void StartPhotoWeight(float to, float seconds)
+        {
+            m_PhotoFrom = m_PhotoWeight;
+            m_PhotoTo = to;
+            m_PhotoStart = Time.unscaledTime;
+            m_PhotoDuration = AccertoneMotion.Duration(seconds) * Mathf.Abs(to - m_PhotoWeight);
+        }
+
+        void UpdatePhotoWeight()
+        {
+            float t = m_PhotoDuration <= 0f ? 1f : Mathf.Clamp01((Time.unscaledTime - m_PhotoStart) / m_PhotoDuration);
+            m_PhotoWeight = Mathf.Lerp(m_PhotoFrom, m_PhotoTo, t);
+            if (m_PhotoWeight <= 0f && m_PhotoTo <= 0f) m_PhotoLeaving = false;
+        }
+
+        Vector3 PhotoPivot(GaragePhotoSettings s)
+        {
+            Vector3 local;
+            switch (s.target)
+            {
+                case PhotoTarget.Nose:
+                    local = m_CarRig != null ? m_CarRig.PartLocal(GaragePart.FrontWing) : new Vector3(0f, 0.3f, 2.4f);
+                    local.x = 0f;
+                    break;
+                case PhotoTarget.Cockpit:
+                    local = m_CarRig != null ? m_CarRig.PartLocal(GaragePart.Cockpit) : new Vector3(0f, 0.86f, 0.2f);
+                    break;
+                case PhotoTarget.RearWing:
+                    local = m_CarRig != null ? m_CarRig.PartLocal(GaragePart.RearWing) : new Vector3(0f, 0.94f, -2.5f);
+                    local.x = 0f;
+                    break;
+                case PhotoTarget.FrontWheel:
+                    local = m_CarRig != null ? m_CarRig.PartLocal(GaragePart.Tyre) : new Vector3(0.95f, 0.38f, 1.5f);
+                    local.x = Mathf.Abs(local.x) * (s.wheelSide >= 0f ? 1f : -1f);
+                    break;
+                default:
+                    local = new Vector3(0f, 0.55f, m_CarRig != null ? m_CarRig.LocalBounds.center.z : 0f);
+                    break;
+            }
+            Vector3 world = m_Car != null ? m_Car.TransformPoint(local) : new Vector3(0f, 0.6f, 0f);
+            return world + Vector3.up * s.lift;
+        }
+
+        void UpdatePhotoCamera(float dt, Vector3 garagePos, float garageFov, out Vector3 pos, out Quaternion rot, out float fov)
+        {
+            var s = GaragePhotoMode.Settings;
+            Vector3 pivot;
+            float yaw, pitch, distance, focal, roll;
+            if (m_PhotoLeaving)
+            {
+                // Aim the orbit at the garage camera; once it is there, fade the weight out.
+                pivot = m_Focus;
+                Vector3 off = garagePos - pivot;
+                float d = Mathf.Max(0.01f, off.magnitude);
+                yaw = Mathf.Atan2(off.x, off.z) * Mathf.Rad2Deg;
+                pitch = Mathf.Asin(Mathf.Clamp(off.y / d, -1f, 1f)) * Mathf.Rad2Deg;
+                distance = d;
+                focal = GaragePhotoSettings.FocalFromFov(garageFov);
+                roll = 0f;
+            }
+            else
+            {
+                pivot = PhotoPivot(s);
+                yaw = s.yaw;
+                pitch = s.pitch;
+                distance = s.distance;
+                focal = s.focal;
+                roll = s.roll;
+            }
+            if (!m_PhotoInit)
+            {
+                m_PhotoInit = true;
+                m_PYaw = yaw; m_PPitch = pitch; m_PDistance = distance; m_PFocal = focal; m_PRoll = roll; m_PPivot = pivot;
+                m_PYawVel = m_PPitchVel = m_PDistanceVel = m_PFocalVel = m_PRollVel = 0f;
+                m_PPivotVel = Vector3.zero;
+            }
+            float st = m_PhotoLeaving ? 0.32f : 0.16f;
+            m_PYaw = Mathf.SmoothDampAngle(m_PYaw, yaw, ref m_PYawVel, st, Mathf.Infinity, dt);
+            m_PPitch = Mathf.SmoothDamp(m_PPitch, pitch, ref m_PPitchVel, st, Mathf.Infinity, dt);
+            m_PDistance = Mathf.SmoothDamp(m_PDistance, distance, ref m_PDistanceVel, st, Mathf.Infinity, dt);
+            m_PFocal = Mathf.SmoothDamp(m_PFocal, focal, ref m_PFocalVel, 0.2f, Mathf.Infinity, dt);
+            m_PRoll = Mathf.SmoothDamp(m_PRoll, roll, ref m_PRollVel, st, Mathf.Infinity, dt);
+            m_PPivot = Vector3.SmoothDamp(m_PPivot, pivot, ref m_PPivotVel, 0.3f, Mathf.Infinity, dt);
+
+            float yr = m_PYaw * Mathf.Deg2Rad, pr = m_PPitch * Mathf.Deg2Rad;
+            Vector3 dir = new Vector3(Mathf.Sin(yr) * Mathf.Cos(pr), Mathf.Sin(pr), Mathf.Cos(yr) * Mathf.Cos(pr));
+            pos = m_PPivot + dir * m_PDistance;
+            pos = KeepInsideRoom(m_PPivot, pos);
+            pos = KeepOutsideCar(pos);
+            rot = Quaternion.LookRotation(m_PPivot - pos, Vector3.up) * Quaternion.Euler(0f, 0f, m_PRoll);
+            fov = GaragePhotoSettings.FovFromFocal(m_PFocal);
+            PhotoFocusDistance = Vector3.Distance(pos, m_PPivot);
+
+            bool arrived = Mathf.Abs(Mathf.DeltaAngle(m_PYaw, yaw)) < 2f && Mathf.Abs(m_PPitch - pitch) < 1.5f &&
+                           Mathf.Abs(m_PDistance - distance) < 0.12f && (m_PPivot - pivot).sqrMagnitude < 0.01f;
+            if (m_PhotoLeaving && m_PhotoTo > 0f && (arrived || Time.unscaledTime - m_PhotoLeaveAt > 1.8f))
+                StartPhotoWeight(0f, 0.45f);
+        }
+
+        void FindRoom()
+        {
+            var showroom = GameObject.Find("ACCERTONE_Showroom");
+            if (showroom == null) return;
+            var left = showroom.transform.Find("SideWall_L");
+            var right = showroom.transform.Find("SideWall_R");
+            if (left == null || right == null) return;
+            Bounds a, b;
+            if (!RendererBounds(left, out a) || !RendererBounds(right, out b)) return;
+            if (a.center.x > b.center.x) { var t = a; a = b; b = t; }
+            float minZ = Mathf.Min(a.min.z, b.min.z), maxZ = Mathf.Max(a.max.z, b.max.z), maxY = Mathf.Max(a.max.y, b.max.y);
+            Bounds w;
+            var back = showroom.transform.Find("RearWall");
+            if (back != null && RendererBounds(back, out w)) maxZ = w.min.z;
+            var ceiling = showroom.transform.Find("Ceiling");
+            if (ceiling != null && RendererBounds(ceiling, out w)) maxY = w.min.y;
+            // Inset so the near clip plane never shows the back of a wall.
+            m_Room.SetMinMax(new Vector3(a.max.x + 0.45f, -100f, minZ + 0.45f), new Vector3(b.min.x - 0.45f, maxY - 0.35f, maxZ - 0.45f));
+            m_HasRoom = m_Room.size.x > 1f && m_Room.size.z > 1f;
+        }
+
+        static bool RendererBounds(Transform t, out Bounds bounds)
+        {
+            bounds = new Bounds();
+            var renderers = t.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0) return false;
+            bounds = renderers[0].bounds;
+            foreach (var r in renderers) bounds.Encapsulate(r.bounds);
+            return true;
+        }
+
+        /// <summary>Pulls the camera in along its line to the target when the orbit would leave the showroom.</summary>
+        Vector3 KeepInsideRoom(Vector3 pivot, Vector3 pos)
+        {
+            if (!m_HasRoom) return pos;
+            Vector3 d = pos - pivot;
+            float len = d.magnitude;
+            if (len < 1e-4f) return pos;
+            Vector3 dir = d / len;
+            float t = len;
+            for (int axis = 0; axis < 3; axis++)
+            {
+                float p = pivot[axis], v = dir[axis];
+                if (v > 1e-5f) t = Mathf.Min(t, (m_Room.max[axis] - p) / v);
+                else if (v < -1e-5f) t = Mathf.Min(t, (m_Room.min[axis] - p) / v);
+            }
+            return pivot + dir * Mathf.Max(0.5f, t);
+        }
+
+        Vector3 KeepOutsideCar(Vector3 pos)
+        {
+            if (m_Car == null) return pos;
+            // An ellipse around the body (plus a margin) the camera may not enter, and a floor it may not go under.
+            Bounds b = m_CarRig != null ? m_CarRig.LocalBounds : new Bounds(Vector3.zero, new Vector3(2f, 1.2f, 5.6f));
+            Vector3 local = m_Car.InverseTransformPoint(pos);
+            float ax = b.extents.x + 0.35f, az = b.extents.z + 0.35f;
+            if (local.y < b.max.y + 0.3f)
+            {
+                float ex = (local.x - b.center.x) / ax, ez = (local.z - b.center.z) / az;
+                float r = Mathf.Sqrt(ex * ex + ez * ez);
+                if (r < 1f)
+                {
+                    if (r < 1e-3f) { ex = 1f; ez = 0f; r = 1f; }
+                    local.x = b.center.x + ex / r * ax;
+                    local.z = b.center.z + ez / r * az;
+                }
+            }
+            local.y = Mathf.Max(local.y, 0.12f);
+            return m_Car.TransformPoint(local);
+        }
+
         float YawForView(float view)
         {
             // Car heading (world yaw) = podium yaw + whatever sits under the podium (turntable spinner, spawn anchor).
@@ -343,6 +601,7 @@ namespace Accertone.Garage
             if (!m_Located || m_Camera == null || m_Podium == null) return;
             float dt = Time.unscaledDeltaTime;
             UpdateWeight();
+            UpdatePhotoWeight();
             if (m_Weight <= 0f && !m_Active)
             {
                 FinishExitIfDone();
@@ -400,6 +659,14 @@ namespace Accertone.Garage
                 float st = Mathf.Lerp(0.35f, 0.06f, k);
                 m_Yaw = Mathf.SmoothDamp(m_Yaw, target, ref m_YawVelocity, st, Mathf.Infinity, dt);
                 if (m_Weight <= 0.02f) m_Yaw = target;
+            }
+            else if (m_Photo)
+            {
+                // Photo Mode: the platform holds still (coasting to a stop) or keeps its display spin.
+                m_Presenting = false;
+                if (GaragePhotoMode.Settings.spin) m_YawVelocity = Mathf.Lerp(m_YawVelocity, AutoSpinSpeed, 1f - Mathf.Exp(-0.9f * dt));
+                else m_YawVelocity *= Mathf.Exp(-2.4f * dt);
+                m_Yaw += m_YawVelocity * dt;
             }
             else if (m_Presenting)
             {
@@ -489,11 +756,12 @@ namespace Accertone.Garage
             Vector3 pos = new Vector3(m_Focus.x, 0f, m_Focus.z) + flat * m_Distance;
             pos.y = Mathf.Max(0.25f, m_Height);
 
-            // Barely-there handheld drift (honours Settings > Camera > Showroom camera motion).
+            // Barely-there handheld drift (honours Settings > Camera > Showroom camera motion); none in Photo Mode.
+            float pw = SmoothWeight(m_PhotoWeight);
             if (AccertoneMotion.CameraMotion)
             {
                 float n = Time.unscaledTime * 0.09f;
-                pos += new Vector3(Mathf.PerlinNoise(n, 2.1f) - 0.5f, Mathf.PerlinNoise(4.3f, n) - 0.5f, 0f) * 0.06f;
+                pos += new Vector3(Mathf.PerlinNoise(n, 2.1f) - 0.5f, Mathf.PerlinNoise(4.3f, n) - 0.5f, 0f) * (0.06f * (1f - pw));
             }
 
             Quaternion look = Quaternion.LookRotation(m_Focus - pos, Vector3.up);
@@ -503,10 +771,22 @@ namespace Accertone.Garage
             float yawOffset = Mathf.Atan(Mathf.Tan(hHalf) * m_Frame) * Mathf.Rad2Deg;
             Quaternion garageRot = Quaternion.AngleAxis(-yawOffset, Vector3.up) * look;
 
+            float fov = m_Fov;
+            if (m_PhotoWeight > 0f)
+            {
+                Vector3 photoPos;
+                Quaternion photoRot;
+                float photoFov;
+                UpdatePhotoCamera(dt, pos, m_Fov, out photoPos, out photoRot, out photoFov);
+                pos = Vector3.Lerp(pos, photoPos, pw);
+                garageRot = Quaternion.Slerp(garageRot, photoRot, pw);
+                fov = Mathf.Lerp(fov, photoFov, pw);
+            }
+
             float w = SmoothWeight(m_Weight);
             m_Camera.transform.position = Vector3.Lerp(rigPos, pos, w);
             m_Camera.transform.rotation = Quaternion.Slerp(rigRot, garageRot, w);
-            m_Camera.fieldOfView = Mathf.Lerp(m_LobbyFov, m_Fov, w);
+            m_Camera.fieldOfView = Mathf.Lerp(m_LobbyFov, fov, w);
         }
 
         static float SmoothWeight(float w)
@@ -546,7 +826,7 @@ namespace Accertone.Garage
                 else if (n.StartsWith("WallWash_Top")) scale = 0.4f;
                 else if (n.StartsWith("WallWash_")) scale = 0.3f;
                 if (Mathf.Approximately(scale, 1f)) continue;
-                m_Lights.Add(new LightMod { light = light, garageScale = scale, powered = light.GetComponent<ShowroomPoweredElement>() != null, baseIntensity = light.intensity });
+                m_Lights.Add(new LightMod { light = light, garageScale = scale, powered = light.GetComponent<ShowroomPoweredElement>() != null, wall = n.StartsWith("WallWash"), baseIntensity = light.intensity });
             }
             foreach (var e in showroom.GetComponentsInChildren<ShowroomPoweredElement>(true))
             {
@@ -617,15 +897,32 @@ namespace Accertone.Garage
             l.enabled = false;
             m_GarageLights.Add(l);
             m_GarageLightBase.Add(intensity);
+            m_GarageLightColor.Add(color);
+            m_LookColor[Mathf.Min(m_GarageLights.Count - 1, 2)] = color;
         }
 
         void ApplyLighting()
         {
             float w = SmoothWeight(m_Weight);
+            float pw = SmoothWeight(m_PhotoWeight);
+            if (pw > 0f)
+            {
+                // Photo looks ease the softboxes, kicker and back wall toward the chosen look.
+                var look = GaragePhotoLooks.Get(GaragePhotoMode.Settings.look);
+                float lk = GarageTheme.Approach(4f);
+                m_LookScale[0] = Mathf.Lerp(m_LookScale[0], look.key, lk);
+                m_LookScale[1] = Mathf.Lerp(m_LookScale[1], look.fill, lk);
+                m_LookScale[2] = Mathf.Lerp(m_LookScale[2], look.kick, lk);
+                m_LookColor[0] = Color.Lerp(m_LookColor[0], look.keyColor, lk);
+                m_LookColor[1] = Color.Lerp(m_LookColor[1], look.fillColor, lk);
+                m_LookColor[2] = Color.Lerp(m_LookColor[2], look.kickColor, lk);
+                m_LookBackdrop = Mathf.Lerp(m_LookBackdrop, look.backdrop, lk);
+            }
             foreach (var m in m_Lights)
             {
                 if (m.light == null) continue;
                 float k = Mathf.Lerp(1f, m.garageScale, w);
+                if (m.wall) k *= Mathf.Lerp(1f, m_LookBackdrop, pw);
                 // Powered lights are re-levelled every Update by the showroom power-up, so scale what it wrote.
                 m.light.intensity = (m.powered ? m.light.intensity : m.baseIntensity) * k;
             }
@@ -634,7 +931,9 @@ namespace Accertone.Garage
                 var l = m_GarageLights[i];
                 if (l == null) continue;
                 l.enabled = w > 0.001f;
-                l.intensity = m_GarageLightBase[i] * w;
+                int li = Mathf.Min(i, 2);
+                l.intensity = m_GarageLightBase[i] * w * Mathf.Lerp(1f, m_LookScale[li], pw);
+                l.color = Color.Lerp(m_GarageLightColor[i], m_LookColor[li], pw);
             }
             // Powered sign text is re-levelled every Update; static sign text is scaled from its own alpha.
             float signK = Mathf.Lerp(1f, SignDim, w);

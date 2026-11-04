@@ -100,7 +100,8 @@ namespace Accertone.Garage
             art.sizeDelta = new Vector2(2f, 46f);
 
             // Header.
-            var index = GarageTheme.Text(m_Rect, "Index", (m_Index + 1).ToString("00") + " / 08", SettingsTheme.Data, 11f, SettingsTheme.Muted);
+            string indexLabel = m_Panel.IndexLabel ?? (m_Index + 1).ToString("00") + " / 08";
+            var index = GarageTheme.Text(m_Rect, "Index", indexLabel, SettingsTheme.Data, 11f, SettingsTheme.Muted);
             SettingsUI.At(index.rectTransform, m_Pad, 10f, 200f, 16f);
             var iconRt = SettingsUI.Rect("Icon", m_Rect);
             SettingsUI.At(iconRt, m_Pad, 36f, 26f, 26f);
@@ -135,11 +136,11 @@ namespace Accertone.Garage
             // Footer.
             var footRule = SettingsUI.Shape(m_Rect, "FooterRule", SettingsTheme.A(SettingsTheme.Hairline, 0.9f));
             SettingsUI.At(footRule.rectTransform, m_Pad, m_Height - FooterHeight, inner, 1f);
-            m_Back = GarageButton.Create(m_Rect, "BACK  ·  ESC", 170f, () => m_Screen.ClosePanel(), false, false, GarageEffect.Spec, null, 38f);
+            m_Back = GarageButton.Create(m_Rect, "BACK  ·  ESC", 170f, () => m_Screen.RequestBack(), false, false, GarageEffect.Spec, null, 38f);
             SettingsUI.At((RectTransform)m_Back.transform, m_Pad, m_Height - FooterHeight + 12f, 170f, 38f);
             if (m_Panel.HasReset)
             {
-                m_Reset = GarageButton.Create(m_Rect, "RESET THIS SYSTEM", 220f, () => { m_Panel.ResetCategory(); m_Panel.Refresh(); }, false, true, GarageEffect.Live, GarageIconKind.Reset, 38f);
+                m_Reset = GarageButton.Create(m_Rect, m_Panel.ResetLabel, 220f, () => { m_Panel.ResetCategory(); m_Panel.Refresh(); }, false, true, GarageEffect.Live, GarageIconKind.Reset, 38f);
                 SettingsUI.At((RectTransform)m_Reset.transform, m_Width - m_Pad - 220f, m_Height - FooterHeight + 12f, 220f, 38f);
             }
             LinkFooter();
@@ -209,6 +210,15 @@ namespace Accertone.Garage
             var controls = m_Panel.stack.controls;
             Selectable first = controls.Count > 0 ? (Selectable)controls[0] : m_Back;
             es.SetSelectedGameObject(first != null ? first.gameObject : null);
+        }
+
+        /// <summary>Slides the panel out of the way (Photo Mode's full-frame view) without removing it.</summary>
+        public void SetCollapsed(bool collapsed)
+        {
+            if (m_Hiding) return;
+            m_ShowT = collapsed ? 0f : 1f;
+            m_Group.blocksRaycasts = !collapsed;
+            m_Group.interactable = !collapsed;
         }
 
         public void Hide()
