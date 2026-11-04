@@ -33,6 +33,8 @@ namespace Accertone.Garage
         TextMeshProUGUI m_Index, m_Title, m_Status;
         CanvasGroup m_Group, m_TextGroup;
 
+        RectTransform m_Hit;
+        bool m_HitRail;
         float m_Hover, m_HoverT, m_Active, m_ActiveT, m_Rail, m_RailT, m_Show, m_ShowT, m_ShowDelayUntil;
         float m_HoverV, m_ActiveV, m_RailV, m_ShowV;
         Vector2 m_FullPos, m_RailPos;
@@ -60,7 +62,8 @@ namespace Accertone.Garage
             m_Group = gameObject.AddComponent<CanvasGroup>();
 
             var hit = SettingsUI.Fill(transform, "Hit", new Color(0f, 0f, 0f, 0f), true);
-            SettingsUI.Stretch(hit.rectTransform, -8f, -10f, -8f, -10f);
+            m_Hit = hit.rectTransform;
+            SettingsUI.Stretch(m_Hit, -8f, -10f, -8f, -10f);
             targetGraphic = hit;
 
             m_Content = SettingsUI.Rect("Content", transform);
@@ -228,6 +231,17 @@ namespace Accertone.Garage
             m_Group.alpha = Mathf.Clamp01(m_Show * 1.15f);
             m_Group.blocksRaycasts = m_Show > 0.6f;
             interactable = m_Show > 0.6f;
+
+            // In the rail only the icon is a target: the full-width hit area would sit over the open panel's rows.
+            bool rail = m_RailT > 0.5f;
+            if (rail != m_HitRail)
+            {
+                m_HitRail = rail;
+                float inset = Width - RailFrame - 12f, below = Height - RailFrame - 12f;
+                if (!rail) SettingsUI.Stretch(m_Hit, -8f, -10f, -8f, -10f);
+                else if (rightSide) SettingsUI.Stretch(m_Hit, inset, -6f, -8f, below);
+                else SettingsUI.Stretch(m_Hit, -8f, -6f, inset, below);
+            }
 
             // Hover glide toward the car (not in the rail).
             float glide = 14f * m_Hover * (1f - m_Rail);

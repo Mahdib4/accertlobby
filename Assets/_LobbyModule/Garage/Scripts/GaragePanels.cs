@@ -62,6 +62,14 @@ namespace Accertone.Garage
         public abstract string Status();
 
         public abstract void Build();
+
+        /// <summary>Called before every <see cref="Build"/>: the panel object outlives its widgets (it is rebuilt on each
+        /// open), so read-outs registered by the previous build must go with them.</summary>
+        public void BeginBuild()
+        {
+            m_Controls.Clear();
+            m_Refreshers.Clear();
+        }
         public virtual void ResetCategory() { }
         public virtual void OnOpen() { }
         public virtual void OnClose() { }

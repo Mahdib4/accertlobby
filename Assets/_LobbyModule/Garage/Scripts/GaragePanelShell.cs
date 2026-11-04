@@ -43,7 +43,9 @@ namespace Accertone.Garage
             shell.m_Right = right;
             shell.m_Width = width;
             shell.m_Pad = pad;
-            float height = 1080f - top - bottomMargin;
+            // The canvas is not always 1080 units tall (aspect ratio and Interface Scale change it): measure it.
+            float hostHeight = host.rect.height > 1f ? host.rect.height : 1080f;
+            float height = Mathf.Max(220f, hostHeight - top - bottomMargin);
             shell.m_Height = height;
             if (right) SettingsUI.AtRight(rt, edge, top, width, height);
             else SettingsUI.At(rt, edge, top, width, height);
@@ -157,6 +159,7 @@ namespace Accertone.Garage
             m_Content.anchoredPosition = Vector2.zero;
             m_Content.sizeDelta = new Vector2(m_Width - m_Pad * 2f, 10f);
             m_Panel.stack = new GarageStack(m_Content, m_Width - m_Pad * 2f);
+            m_Panel.BeginBuild();
             m_Panel.Build();
             m_ContentHeight = m_Panel.stack.y;
             m_Content.sizeDelta = new Vector2(m_Content.sizeDelta.x, m_ContentHeight);
@@ -200,7 +203,8 @@ namespace Accertone.Garage
         void OnControlFocused(GarageControl c)
         {
             m_Screen.OnControlFocused(c);
-            EnsureVisible(c);
+            // Keyboard / gamepad focus scrolls into view; a hover does not (it would scroll the list under the cursor).
+            if (!GarageControl.PointerSelecting) EnsureVisible(c);
         }
 
         public void FocusFirst()
@@ -265,8 +269,13 @@ namespace Accertone.Garage
 
         public void OnScroll(PointerEventData eventData)
         {
+            float y = eventData.scrollDelta.y;
+            if (Mathf.Abs(y) < 0.01f) return; // horizontal-only or noise
+            // In wheel notches: a notch stays 90 units, touchpad fractions scroll in proportion.
+            var es = EventSystem.current;
+            float ticks = es != null && es.currentInputModule != null ? es.currentInputModule.ConvertPointerEventScrollDeltaToTicks(eventData.scrollDelta).y : y / 6f;
             float max = Mathf.Max(0f, m_ContentHeight - m_ViewHeight);
-            m_ScrollT = Mathf.Clamp(m_ScrollT - Mathf.Sign(eventData.scrollDelta.y) * 90f, 0f, max);
+            m_ScrollT = Mathf.Clamp(m_ScrollT - Mathf.Clamp(ticks, -1f, 1f) * 90f, 0f, max);
         }
 
         /// <summary>Point on the panel's inner edge level with a control (root space, centre pivot).</summary>

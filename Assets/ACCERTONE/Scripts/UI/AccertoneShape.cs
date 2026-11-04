@@ -36,14 +36,17 @@ namespace Accertone.UI
 
         static readonly List<Vector2> s_Poly = new List<Vector2>(16);
         static readonly List<Vector2> s_Inner = new List<Vector2>(16);
+        static readonly Vector2[] s_Corners = new Vector2[4];
+        static readonly ChamferCorners[] s_CornerFlags = { ChamferCorners.BottomLeft, ChamferCorners.TopLeft, ChamferCorners.TopRight, ChamferCorners.BottomRight };
 
-        public float chamfer { get { return m_Chamfer; } set { m_Chamfer = value; SetVerticesDirty(); } }
-        public ChamferCorners corners { get { return m_Corners; } set { m_Corners = value; SetVerticesDirty(); } }
-        public float skew { get { return m_Skew; } set { m_Skew = value; SetVerticesDirty(); } }
-        public bool outline { get { return m_Outline; } set { m_Outline = value; SetVerticesDirty(); } }
-        public float outlineWidth { get { return m_OutlineWidth; } set { m_OutlineWidth = value; SetVerticesDirty(); } }
-        public float alphaLeft { get { return m_AlphaLeft; } set { m_AlphaLeft = value; SetVerticesDirty(); } }
-        public float alphaRight { get { return m_AlphaRight; } set { m_AlphaRight = value; SetVerticesDirty(); } }
+        // Setters only dirty the mesh when the value changes: callers that animate (nav items, buttons) write them every frame.
+        public float chamfer { get { return m_Chamfer; } set { if (m_Chamfer == value) return; m_Chamfer = value; SetVerticesDirty(); } }
+        public ChamferCorners corners { get { return m_Corners; } set { if (m_Corners == value) return; m_Corners = value; SetVerticesDirty(); } }
+        public float skew { get { return m_Skew; } set { if (m_Skew == value) return; m_Skew = value; SetVerticesDirty(); } }
+        public bool outline { get { return m_Outline; } set { if (m_Outline == value) return; m_Outline = value; SetVerticesDirty(); } }
+        public float outlineWidth { get { return m_OutlineWidth; } set { if (m_OutlineWidth == value) return; m_OutlineWidth = value; SetVerticesDirty(); } }
+        public float alphaLeft { get { return m_AlphaLeft; } set { if (m_AlphaLeft == value) return; m_AlphaLeft = value; SetVerticesDirty(); } }
+        public float alphaRight { get { return m_AlphaRight; } set { if (m_AlphaRight == value) return; m_AlphaRight = value; SetVerticesDirty(); } }
 
         protected override void OnPopulateMesh(VertexHelper vh)
         {
@@ -80,8 +83,9 @@ namespace Accertone.UI
                 br = new Vector2(r.xMax, r.yMin);
             }
 
-            var c = new Vector2[] { bl, tl, tr, br };
-            var flags = new ChamferCorners[] { ChamferCorners.BottomLeft, ChamferCorners.TopLeft, ChamferCorners.TopRight, ChamferCorners.BottomRight };
+            var c = s_Corners;
+            c[0] = bl; c[1] = tl; c[2] = tr; c[3] = br;
+            var flags = s_CornerFlags;
             float maxCut = Mathf.Min(r.width, r.height) * 0.5f;
             float cut = Mathf.Clamp(m_Chamfer, 0f, maxCut);
 

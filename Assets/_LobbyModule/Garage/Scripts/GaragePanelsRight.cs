@@ -38,6 +38,7 @@ namespace Accertone.Garage
                 i => Session.EditSetup(s => s.tireCompound = s_Order[i]), GarageEffect.Live, GaragePart.Tyre, dots), shot));
             stack.Place(WithShot(GarageChoice.Create(stack.Root, "SIDEWALL MARKING", W, new[] { "COMPOUND COLOURS", "TEAM COLOUR" },
                 () => (int)Look.sidewall, i => Session.EditAppearance(x => x.sidewall = (SidewallMarking)i), GarageEffect.Live, GaragePart.Tyre), shot));
+            stack.Note("The compound shows on the car through its sidewall colour, so only while SIDEWALL MARKING is COMPOUND COLOURS; TEAM COLOUR keeps the livery's own sidewall art.", GarageIconKind.Info);
 
             stack.Section("PRESSURES  ·  PSI");
             float h = stack.Half;
@@ -204,8 +205,8 @@ namespace Accertone.Garage
             stack.Section("SAVED SETUPS");
             var names = Session.UserSetupNames();
             names.Sort(StringComparer.Ordinal);
-            int shown = 0;
-            for (int i = names.Count - 1; i >= 0 && shown < 4; i--, shown++)
+            // Every saved setup is listed (the panel scrolls), newest name first.
+            for (int i = names.Count - 1; i >= 0; i--)
             {
                 string n = names[i];
                 var load = GarageButton.Create(stack.Root, "LOAD  " + n, W - 140f, () => { Session.LoadNamedSetup(n); screen.RebuildPanel(); }, false, false, GarageEffect.Live, GarageIconKind.Setup, 36f);
@@ -215,9 +216,9 @@ namespace Accertone.Garage
             if (names.Count == 0) stack.Note("No saved setups yet.", GarageIconKind.Save);
             stack.Place(GarageButton.Create(stack.Root, "SAVE CURRENT SETUP", W, () => { Session.SaveSetupAsNew(); screen.RebuildPanel(); }, true, false, GarageEffect.Spec, GarageIconKind.Save), 14f);
 
-            stack.Section("SAVED LIVERIES");
             var liveries = Session.Liveries();
-            for (int i = liveries.Count - 1, k = 0; i >= 0 && k < 3; i--, k++)
+            stack.Section("SAVED LIVERIES  ·  " + liveries.Count + " / " + GarageSave.MaxLiveries);
+            for (int i = liveries.Count - 1; i >= 0; i--)
             {
                 var slot = liveries[i];
                 var scheme = GarageCatalog.FindScheme(slot.appearance.schemeId);
@@ -227,13 +228,16 @@ namespace Accertone.Garage
                 PlaceRow(apply, del);
             }
             if (liveries.Count == 0) stack.Note("No saved liveries yet.", GarageIconKind.Save);
-            stack.Place(GarageButton.Create(stack.Root, "SAVE CURRENT LIVERY", W, () => { Session.SaveLiveryAsNew(); screen.RebuildPanel(); }, true, false, GarageEffect.Spec, GarageIconKind.Paint), 14f);
+            if (liveries.Count >= GarageSave.MaxLiveries)
+                stack.Note("All " + GarageSave.MaxLiveries + " livery slots are in use. Delete one to save a new livery.", GarageIconKind.Save);
+            else
+                stack.Place(GarageButton.Create(stack.Root, "SAVE CURRENT LIVERY", W, () => { Session.SaveLiveryAsNew(); screen.RebuildPanel(); }, true, false, GarageEffect.Spec, GarageIconKind.Paint), 14f);
 
             stack.Section("RESET");
             stack.Place(GarageButton.Create(stack.Root, "RESET SETUP TO FACTORY", W, () => { Session.ResetSetupToFactory(); screen.RebuildPanel(); }, false, true, GarageEffect.Live, GarageIconKind.Reset));
             stack.Place(GarageButton.Create(stack.Root, "RESET APPEARANCE TO FACTORY", W, () => { Session.ResetAppearanceToFactory(); screen.RebuildPanel(); }, false, true, GarageEffect.Live, GarageIconKind.Reset));
             stack.Place(GarageButton.Create(stack.Root, "OPEN ENGINEERING SHEET  (ALL PARAMETERS)", W, () => screen.OpenEngineeringSheet(), false, false, GarageEffect.Spec, GarageIconKind.Info));
-            stack.Note("Your current setup and appearance are saved automatically a moment after every change and restored the next time the game starts. Saved setups also appear in the engineering sheet.", GarageIconKind.Save);
+            stack.Note("Your current setup and appearance are saved automatically a moment after every change and restored the next time the game starts.", GarageIconKind.Save);
 
             OnRefresh(() =>
             {

@@ -13,7 +13,7 @@ namespace Accertone.Garage
     /// </summary>
     public class GarageSession
     {
-        const float SaveDelay = 0.8f;
+        const float SaveDelay = 0.8f, RetryDelay = 5f;
 
         static GarageSession s_Current;
         public static GarageSession Current { get { return s_Current; } }
@@ -33,8 +33,10 @@ namespace Accertone.Garage
         public event Action Changed;
 
         GarageCarRig m_Rig;
-        float m_SaveAt = -1f;
+        float m_SaveAt = -1f, m_RetryAt = -1f;
         bool m_SetupDirty, m_AppearanceDirty, m_Syncing;
+        // The only setup value the car's appearance depends on (the sidewall marking colour).
+        TireCompound m_AppliedCompound;
 
         /// <summary>Domain reload is off in this project, so statics outlive a Play session: start clean each time.</summary>
         public static void ResetStatics()
@@ -58,7 +60,7 @@ namespace Accertone.Garage
             var saved = GarageSave.LoadActiveSetup();
             Setup = (saved ?? manager.ActiveSetup ?? Factory).Clone();
             Setup.ValidateAndClamp();
-            SetupSource = saved != null ? saved.setupName : Setup.setupName;
+            SetupSource = SourceOf(Setup);
             Appearance = GarageSave.LoadAppearance();
             Analysis = CarSetupEngineeringEngine.Analyze(Setup);
             // The preset manager always starts from Balanced; give it the player's setup.
@@ -66,6 +68,14 @@ namespace Accertone.Garage
             manager.SetActiveSetup(Setup);
             m_Syncing = false;
             manager.OnSetupChanged += OnManagerSetupChanged;
+            // Static handler, removed first: with domain reload off it must not stack up across Play sessions.
+            Application.quitting -= FlushOnQuit;
+            Application.quitting += FlushOnQuit;
+        }
+
+        static void FlushOnQuit()
+        {
+            if (s_Current != null && s_Current.SavePending) s_Current.SaveNow();
         }
 
         void Attach(GarageCarRig rig)
@@ -73,6 +83,7 @@ namespace Accertone.Garage
             m_Rig = rig;
             if (m_Rig == null) return;
             m_Rig.ApplyAppearance(Appearance, Setup.tireCompound);
+            m_AppliedCompound = Setup.tireCompound;
             m_Rig.ApplySetupVisuals(Setup, true);
             PushToCar();
         }
@@ -82,8 +93,10 @@ namespace Accertone.Garage
         {
             if (m_Syncing || setup == null) return;
             Setup = setup.Clone();
-            SetupSource = setup.setupName;
+            SetupSource = SourceOf(Setup);
             AfterSetupChange(true);
+            // Applied from the engineering sheet, while the Garage (the only thing that ticks the save timer) is closed.
+            SaveNow();
         }
 
         // =====================================================================================================
@@ -94,6 +107,8 @@ namespace Accertone.Garage
         {
             if (edit == null) return;
             edit(Setup);
+            // Edited values are no longer the preset or saved setup they came from.
+            Setup.setupName = "";
             SetupSource = "";
             AfterSetupChange(false);
         }
@@ -113,7 +128,12 @@ namespace Accertone.Garage
             if (m_Rig != null)
             {
                 m_Rig.ApplySetupVisuals(Setup);
-                m_Rig.ApplyAppearance(Appearance, Setup.tireCompound);
+                // Re-colouring is a full set of GPU blits: only when the compound (the sidewall colour) changed.
+                if (Setup.tireCompound != m_AppliedCompound)
+                {
+                    m_Rig.ApplyAppearance(Appearance, Setup.tireCompound);
+                    m_AppliedCompound = Setup.tireCompound;
+                }
             }
             if (!fromManager)
             {
@@ -132,7 +152,11 @@ namespace Accertone.Garage
             if (edit == null) return;
             edit(Appearance);
             Appearance.Validate();
-            if (m_Rig != null) m_Rig.ApplyAppearance(Appearance, Setup.tireCompound);
+            if (m_Rig != null)
+            {
+                m_Rig.ApplyAppearance(Appearance, Setup.tireCompound);
+                m_AppliedCompound = Setup.tireCompound;
+            }
             m_AppearanceDirty = true;
             ScheduleSave();
             Raise();
@@ -174,21 +198,24 @@ namespace Accertone.Garage
             m_SaveAt = Time.unscaledTime + SaveDelay;
         }
 
-        /// <summary>Call every frame (the Garage stage does): writes a pending save once edits pause.</summary>
+        /// <summary>Call every frame (the Garage screen and stage do): writes a pending save once edits pause, and
+        /// retries a failed one.</summary>
         public void Tick()
         {
-            if (m_SaveAt > 0f && Time.unscaledTime >= m_SaveAt) SaveNow();
+            float now = Time.unscaledTime;
+            if ((m_SaveAt > 0f && now >= m_SaveAt) || (m_RetryAt > 0f && now >= m_RetryAt)) SaveNow();
         }
 
         public void SaveNow()
         {
             m_SaveAt = -1f;
-            bool ok = true;
-            if (m_SetupDirty) ok &= GarageSave.SaveActiveSetup(Setup);
-            if (m_AppearanceDirty) ok &= GarageSave.SaveAppearance(Appearance);
-            m_SetupDirty = m_AppearanceDirty = false;
-            LastSaveFailed = !ok;
-            LastSavedAt = Time.unscaledTime;
+            m_RetryAt = -1f;
+            // Each flag clears only when its own write succeeded, so failed data stays queued and is retried.
+            if (m_SetupDirty && GarageSave.SaveActiveSetup(Setup)) m_SetupDirty = false;
+            if (m_AppearanceDirty && GarageSave.SaveAppearance(Appearance)) m_AppearanceDirty = false;
+            LastSaveFailed = m_SetupDirty || m_AppearanceDirty;
+            if (LastSaveFailed) m_RetryAt = Time.unscaledTime + RetryDelay;
+            else LastSavedAt = Time.unscaledTime;
             Raise();
         }
 
@@ -232,9 +259,13 @@ namespace Accertone.Garage
             return name;
         }
 
-        public void LoadNamedSetup(string name)
+        /// <summary>Loads a saved or factory setup by name; false (and nothing changes) when it no longer exists.</summary>
+        public bool LoadNamedSetup(string name)
         {
+            // The manager falls back to Balanced for a missing file; never label that fallback with the user's name.
+            if (Array.IndexOf(FactoryPresetKeys, name) < 0 && !UserSetupNames().Contains(name)) { Raise(); return false; }
             LoadSetup(CarSetupPresetManager.Instance.LoadSetupByName(name), name);
+            return true;
         }
 
         public bool DeleteNamedSetup(string name)
@@ -252,7 +283,8 @@ namespace Accertone.Garage
         public string SaveLiveryAsNew()
         {
             var slots = GarageSave.LoadLiveries();
-            if (slots.Count >= GarageSave.MaxLiveries) slots.RemoveAt(0);
+            // Full: the player deletes a slot first; nothing is evicted behind their back.
+            if (slots.Count >= GarageSave.MaxLiveries) return null;
             string name;
             int n = 1;
             do { name = "LIVERY " + n.ToString("00"); n++; } while (slots.Exists(s => s.name == name) && n < 100);
@@ -273,9 +305,22 @@ namespace Accertone.Garage
         /// <summary>Number of setup values that differ from the factory baseline.</summary>
         public int ChangesFromFactory(List<string> names = null)
         {
-            var a = Setup;
-            var b = Factory;
+            return ChangesBetween(Setup, Factory, names);
+        }
+
+        /// <summary>A setup's own name, unless it names a factory preset whose values it no longer matches.</summary>
+        static string SourceOf(F1CarSetupData setup)
+        {
+            if (setup == null) return "";
+            int preset = PresetIndexOf(setup.setupName);
+            if (preset >= 0 && ChangesBetween(setup, CarSetupPresetManager.Instance.LoadSetupByName(FactoryPresetKeys[preset]), null) > 0) return "";
+            return setup.setupName ?? "";
+        }
+
+        static int ChangesBetween(F1CarSetupData a, F1CarSetupData b, List<string> names)
+        {
             int n = 0;
+            if (a == null || b == null) return 0;
             Diff(ref n, names, "FRONT WING", a.frontWingAngle != b.frontWingAngle);
             Diff(ref n, names, "REAR WING", a.rearWingAngle != b.rearWingAngle);
             Diff(ref n, names, "DRS", a.drsEfficiency != b.drsEfficiency);
@@ -291,6 +336,10 @@ namespace Accertone.Garage
             Diff(ref n, names, "DIFFERENTIAL", a.diffOnThrottle != b.diffOnThrottle || a.diffOffThrottle != b.diffOffThrottle || a.diffPreload != b.diffPreload);
             Diff(ref n, names, "FINAL DRIVE", !Mathf.Approximately(a.finalDriveRatio, b.finalDriveRatio));
             Diff(ref n, names, "ENGINE", a.engineMix != b.engineMix || a.engineBraking != b.engineBraking);
+            Diff(ref n, names, "ERS", a.ersMode != b.ersMode || a.ersRecovery != b.ersRecovery);
+            Diff(ref n, names, "ASSISTS", a.tractionControl != b.tractionControl || a.antiLockBrakes != b.antiLockBrakes);
+            Diff(ref n, names, "FORCE FEEDBACK", a.ffbStrength != b.ffbStrength || a.ffbDamper != b.ffbDamper || a.ffbCurbDetail != b.ffbCurbDetail ||
+                                                 a.understeerEnhance != b.understeerEnhance);
             return n;
         }
 

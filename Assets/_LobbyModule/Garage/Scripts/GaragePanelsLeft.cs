@@ -214,8 +214,9 @@ namespace Accertone.Garage
             OnRefresh(() =>
             {
                 var a = Session.Analysis;
-                float r = Setup.rearRideHeight - Setup.frontRideHeight;
-                rake.Set((r >= 0 ? "+" : "") + Mathf.RoundToInt(r) + " MM  (REAR HIGHER)");
+                int r = Setup.rearRideHeight - Setup.frontRideHeight;
+                string side = r > 0 ? "REAR HIGHER" : r < 0 ? "FRONT HIGHER" : "LEVEL";
+                rake.Set((r > 0 ? "+" : "") + r + " MM  (" + side + ")");
                 mech.Set(a.mechanicalBalance / 100f, "FRONT " + Mathf.RoundToInt(a.mechanicalBalance) + "%", Mathf.RoundToInt(100f - a.mechanicalBalance) + "% REAR", fa.mechanicalBalance / 100f);
                 handling.Set(a.handlingSummary, -1f, -1f, a.handlingColor);
                 wear.Set("× " + a.tireWearRateIndex.ToString("0.00"), Mathf.InverseLerp(0.8f, 1.6f, a.tireWearRateIndex), Mathf.InverseLerp(0.8f, 1.6f, fa.tireWearRateIndex));
@@ -259,12 +260,13 @@ namespace Accertone.Garage
             var f = Session.Factory;
             var shot = GarageShots.Brakes(Rig);
             stack.Section("BRAKE SETUP", 0f);
-            stack.Place(WithShot(SetupSlider("BRAKE BIAS (FRONT)", 50, 70, 1, f.brakeBias, s => s.brakeBias, (s, v) => s.brakeBias = Mathf.RoundToInt(v), Pct, GarageEffect.Estimate, GaragePart.Brakes), shot));
-            stack.Place(WithShot(SetupSlider("BRAKE PRESSURE", 80, 100, 1, f.brakePressure, s => s.brakePressure, (s, v) => s.brakePressure = Mathf.RoundToInt(v), Pct, GarageEffect.Estimate, GaragePart.Brakes), shot));
+            stack.Place(WithShot(SetupSlider("BRAKE BIAS (FRONT)", 50, 70, 1, f.brakeBias, s => s.brakeBias, (s, v) => s.brakeBias = Mathf.RoundToInt(v), Pct, GarageEffect.Live, GaragePart.Brakes), shot));
+            stack.Place(WithShot(SetupSlider("BRAKE PRESSURE", 80, 100, 1, f.brakePressure, s => s.brakePressure, (s, v) => s.brakePressure = Mathf.RoundToInt(v), Pct, GarageEffect.Live, GaragePart.Brakes), shot));
             stack.Place(WithShot(SetupSlider("BRAKE DUCTS", 1, 5, 1, f.brakeDucts, s => s.brakeDucts, (s, v) => s.brakeDucts = Mathf.RoundToInt(v),
                 v => new[] { "", "1 · CLOSED", "2", "3", "4", "5 · OPEN" }[Mathf.Clamp(Mathf.RoundToInt(v), 1, 5)], GarageEffect.Estimate, GaragePart.Brakes), shot));
             stack.Place(WithShot(GarageChoice.Create(stack.Root, "HEAT PREVIEW", W, new[] { "OFF", "ON" }, () => m_Heat ? 1 : 0,
                 i => { m_Heat = i == 1; ApplyHeat(); Refresh(); }, GarageEffect.Live, GaragePart.Brakes), shot));
+            stack.Note("Bias and pressure show on the car through the heat preview (which axle glows, and how hot); they also drive the estimates below.", GarageIconKind.Info);
 
             stack.Section("ESTIMATES");
             var balance = stack.Place(GarageBalance.Create(stack.Root, "BRAKE BALANCE  ·  MARKER = IDEAL", W));

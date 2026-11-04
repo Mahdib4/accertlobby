@@ -13,7 +13,7 @@ namespace Accertone.Settings
     /// <summary>
     /// Routes the lobby tabs between the showroom (HOME), the garage (GARAGE), the play game modes screen
     /// (PLAY / CAREER / ONLINE), and the settings overlay (SETTINGS). The engineering sheet (CarSetupUI) is
-    /// reached from the garage's Car Setup page.
+    /// reached from the garage's Car Setup page and from Free Practice's detailed car setup button.
     /// </summary>
     public class LobbyNavigationCoordinator : MonoBehaviour
     {
@@ -35,9 +35,7 @@ namespace Accertone.Settings
 
         const string SettingsId = "settings";
         const string GarageId = "garage";
-        const int GarageSetupPage = 6;
         int m_CurrentTab;
-        int m_PendingGaragePage = -1;
         int m_IgnoreEscapeFrame = -1;
         bool m_Reverting;
 
@@ -140,7 +138,7 @@ namespace Accertone.Settings
                 playModeView = playGo.AddComponent<PlayModeSelectionUI>();
             }
             playModeView.OnCloseRequested = ReturnToHome;
-            playModeView.OnOpenCarSetupRequested = OpenGarageSetup;
+            playModeView.OnOpenCarSetupRequested = ShowCarSetupView;
             playModeView.gameObject.SetActive(false);
 
             // 4. Garage
@@ -155,22 +153,6 @@ namespace Accertone.Settings
             garageView.OnCloseRequested = ReturnToHome;
             garageView.OnOpenEngineeringSheet = ShowCarSetupView;
             garageView.gameObject.SetActive(false);
-        }
-
-        int GarageTabIndex()
-        {
-            if (navBar == null) return 1;
-            for (int i = 0; i < navBar.tabs.Length; i++) if (navBar.tabs[i].id.ToLowerInvariant() == GarageId) return i;
-            return 1;
-        }
-
-        /// <summary>Opens the garage on its Car Setup page (used by Free Practice's "detailed car setup").</summary>
-        public void OpenGarageSetup()
-        {
-            m_PendingGaragePage = GarageSetupPage;
-            int tab = GarageTabIndex();
-            if (navBar != null && navBar.selectedIndex != tab) navBar.Select(tab);
-            else { m_CurrentTab = tab; ShowGarageView(); }
         }
 
         /// <summary>Closes the garage if it is up. Its 3D restore (camera, turntable, driver) animates on its own.</summary>
@@ -252,10 +234,8 @@ namespace Accertone.Settings
             if (playModeView != null && playModeView.IsOpen) playModeView.Close();
             if (carSetupView != null) carSetupView.gameObject.SetActive(false);
             OverlayOpen = true;
-            int page = m_PendingGaragePage;
-            m_PendingGaragePage = -1;
             // The garage fades the showroom panels out itself, in step with its camera move.
-            if (garageView != null) garageView.Open(page);
+            if (garageView != null) garageView.Open();
             else SetShowroomPanels(false);
         }
 

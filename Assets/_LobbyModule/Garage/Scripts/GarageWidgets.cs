@@ -97,6 +97,11 @@ namespace Accertone.Garage
         public bool hasShot;
         public GarageShot shot;
         public Action<GarageControl> focused;
+        /// <summary>False for controls that must not take focus when the pointer passes over them (header buttons).</summary>
+        public bool selectOnHover = true;
+
+        /// <summary>True while a pointer hover is making the selection (the panel does not auto-scroll for those).</summary>
+        public static bool PointerSelecting { get; private set; }
 
         protected RectTransform m_Rect;
         protected TextMeshProUGUI m_Label;
@@ -150,8 +155,19 @@ namespace Accertone.Garage
         public override void OnPointerEnter(PointerEventData eventData)
         {
             base.OnPointerEnter(eventData);
-            if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject != gameObject)
-                EventSystem.current.SetSelectedGameObject(gameObject);
+            SelectFromPointer(eventData);
+        }
+
+        /// <summary>Hover takes focus, but only from a pointer that is moving: content scrolling under a resting cursor
+        /// raises enter events too, and must not steal keyboard / gamepad focus.</summary>
+        public void SelectFromPointer(PointerEventData eventData)
+        {
+            var es = EventSystem.current;
+            if (!selectOnHover || es == null || es.currentSelectedGameObject == gameObject) return;
+            if (eventData != null && !eventData.IsPointerMoving()) return;
+            PointerSelecting = true;
+            try { es.SetSelectedGameObject(gameObject); }
+            finally { PointerSelecting = false; }
         }
 
         protected virtual void Update()
@@ -293,7 +309,7 @@ namespace Accertone.Garage
     /// <summary>
     /// A row of choices (text chips or colour swatches). Left/right step through them; click picks one.
     /// </summary>
-    public class GarageChoice : GarageControl
+    public class GarageChoice : GarageControl, ISubmitHandler
     {
         public Func<int> getter;
         public Action<int> setter;
@@ -311,6 +327,10 @@ namespace Accertone.Garage
         bool m_Swatches;
         int m_Columns;
         float m_ChipW, m_ChipH, m_Gap;
+        // Tile grids (presets, schemes, rims, looks) move a cursor with the arrows and apply on Submit or click, so
+        // browsing never loads a preset or overwrites custom colours. Chip rows still apply as you step.
+        int m_Cursor = -1;
+        bool CursorMode { get { return m_Columns > 0; } }
 
         public int Count { get { return m_Options.Length; } }
 
@@ -393,8 +413,8 @@ namespace Accertone.Garage
                 var hit = SettingsUI.Fill(chip, "Hit", new Color(0f, 0f, 0f, 0f), true);
                 SettingsUI.Stretch(hit.rectTransform);
                 var trigger = chip.gameObject.AddComponent<GarageClick>();
-                trigger.onClick = () => { if (!m_Locked) Pick(index, true); };
-                trigger.onEnter = () => { if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(gameObject); };
+                trigger.onClick = () => { if (m_Locked) return; if (CursorMode) m_Cursor = index; Pick(index, true); };
+                trigger.onEnter = SelectFromPointer;
 
                 if (swatches)
                 {
@@ -463,13 +483,16 @@ namespace Accertone.Garage
         {
             int cur = getter != null ? getter() : 0;
             if (cur >= m_Options.Length) cur = m_Options.Length - 1;
-            m_Value.text = cur >= 0 ? m_Options[cur] : noneLabel;
+            bool browsing = CursorMode && m_Cursor >= 0 && m_Cursor != cur;
+            m_Value.text = browsing ? m_Options[m_Cursor] + "  ·  ENTER" : (cur >= 0 ? m_Options[cur] : noneLabel);
             if (!m_Swatches && m_Columns == 0) m_Value.text = cur >= 0 ? "" : noneLabel;
             for (int i = 0; i < m_Chips.Count; i++)
             {
                 bool on = i == cur;
                 var frame = m_ChipFrames[i];
-                frame.color = on ? (m_Locked ? SettingsTheme.Muted : SettingsTheme.Accent) : SettingsTheme.A(SettingsTheme.Metallic, m_Swatches ? 0.25f : 0.3f);
+                frame.color = on ? (m_Locked ? SettingsTheme.Muted : SettingsTheme.Accent)
+                    : browsing && i == m_Cursor ? SettingsTheme.A(SettingsTheme.AccentLight, 0.8f)
+                    : SettingsTheme.A(SettingsTheme.Metallic, m_Swatches ? 0.25f : 0.3f);
                 if (m_ChipText[i] != null) m_ChipText[i].color = on ? SettingsTheme.White : (m_Locked ? SettingsTheme.Muted : SettingsTheme.Text2);
             }
         }
@@ -484,10 +507,57 @@ namespace Accertone.Garage
             if (sound) GarageTheme.PlaySound(UiSound.Change);
         }
 
+        public override void OnSelect(BaseEventData eventData)
+        {
+            base.OnSelect(eventData);
+            if (!CursorMode) return;
+            m_Cursor = Mathf.Clamp(getter != null ? getter() : 0, 0, m_Options.Length - 1);
+            Refresh();
+        }
+
+        public override void OnDeselect(BaseEventData eventData)
+        {
+            base.OnDeselect(eventData);
+            if (!CursorMode) return;
+            m_Cursor = -1;
+            Refresh();
+        }
+
+        public void OnSubmit(BaseEventData eventData)
+        {
+            if (!CursorMode || m_Locked || m_Cursor < 0) return;
+            Pick(m_Cursor, true);
+            Refresh();
+        }
+
         public override void OnMove(AxisEventData eventData)
         {
             int cur = getter != null ? getter() : 0;
             int n = m_Options.Length;
+            if (CursorMode)
+            {
+                int c = m_Cursor >= 0 ? m_Cursor : Mathf.Clamp(cur, 0, n - 1);
+                int next = -1;
+                switch (eventData.moveDir)
+                {
+                    case MoveDirection.Left: next = c % m_Columns > 0 ? c - 1 : -1; break;
+                    case MoveDirection.Right: next = c % m_Columns < m_Columns - 1 && c + 1 < n ? c + 1 : -1; break;
+                    case MoveDirection.Up: next = c - m_Columns; break;
+                    case MoveDirection.Down: next = c + m_Columns; break;
+                }
+                if (next < 0 || next >= n)
+                {
+                    // Up / down off the grid leave the control; left / right stop at its edge.
+                    if (eventData.moveDir == MoveDirection.Up || eventData.moveDir == MoveDirection.Down) base.OnMove(eventData);
+                    else eventData.Use();
+                    return;
+                }
+                m_Cursor = next;
+                Refresh();
+                GarageTheme.PlaySound(UiSound.Move);
+                eventData.Use();
+                return;
+            }
             if (eventData.moveDir == MoveDirection.Left || eventData.moveDir == MoveDirection.Right)
             {
                 int d = eventData.moveDir == MoveDirection.Right ? 1 : -1;
@@ -554,8 +624,10 @@ namespace Accertone.Garage
         TextMeshProUGUI m_Text;
         AccertoneShape m_Fill, m_Frame;
         string m_Caption;
-        float m_ArmedUntil = -1f;
+        float m_ArmedUntil = -1f, m_ArmedAt;
         float m_Flash;
+        // A double-click's second press must not count as the confirmation.
+        const float ConfirmDelay = 0.4f;
 
         public static GarageButton Create(RectTransform parent, string label, float width, Action onClick, bool primary = false, bool confirm = false,
             GarageEffect effect = GarageEffect.Spec, GarageIconKind? icon = null, float height = 40f)
@@ -612,11 +684,13 @@ namespace Accertone.Garage
             if (!IsInteractable()) return;
             if (confirm && m_ArmedUntil < 0f)
             {
-                m_ArmedUntil = Time.unscaledTime + 3f;
-                m_Text.text = "CONFIRM — PRESS AGAIN";
+                m_ArmedAt = Time.unscaledTime;
+                m_ArmedUntil = m_ArmedAt + 3f;
+                m_Text.text = m_Rect.sizeDelta.x < 200f ? "CONFIRM?" : "CONFIRM — PRESS AGAIN";
                 GarageTheme.PlaySound(UiSound.Error);
                 return;
             }
+            if (confirm && Time.unscaledTime - m_ArmedAt < ConfirmDelay) return;
             m_ArmedUntil = -1f;
             m_Text.text = m_Caption;
             m_Flash = 1f;
@@ -643,9 +717,10 @@ namespace Accertone.Garage
     /// <summary>Pointer helper for sub-parts of a control (chips).</summary>
     public class GarageClick : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler
     {
-        public Action onClick, onEnter;
+        public Action onClick;
+        public Action<PointerEventData> onEnter;
         public void OnPointerClick(PointerEventData eventData) { if (eventData.button == PointerEventData.InputButton.Left && onClick != null) onClick(); }
-        public void OnPointerEnter(PointerEventData eventData) { if (onEnter != null) onEnter(); }
+        public void OnPointerEnter(PointerEventData eventData) { if (onEnter != null) onEnter(eventData); }
     }
 
     /// <summary>A read-only figure: label, value and an optional bar (0..1) with the factory value marked.</summary>

@@ -30,6 +30,8 @@ namespace Accertone.Garage
         const float PhotoPanelWidth = 520f, PhotoTop = 96f, PhotoBottom = 96f, PhotoEdge = 48f;
 
         static readonly string[] s_HudPanels = { "PlayerCard", "SessionPanel", "ChassisInfo", "RaceAction", "InputHints" };
+        // TMP formats these into its own buffer, so the turning read-out allocates no strings.
+        static readonly string[] s_ViewFormats = { "VIEW {0:000}°  ·  MANUAL", "VIEW {0:000}°  ·  AUTO SPIN", "VIEW {0:000}°  ·  HOLD" };
         static readonly string[] s_PartNames = { "BODYWORK", "FRONT WING", "REAR WING · DRS", "SUSPENSION", "FRONT BRAKE", "FRONT TYRE", "POWER UNIT", "SURVIVAL CELL", "AC-26" };
 
         public Action OnCloseRequested;
@@ -128,6 +130,7 @@ namespace Accertone.Garage
             gameObject.SetActive(true);
             Build();
             PlaceInLobbyHierarchy();
+            PlaceItems();
             m_Stage = GarageStage.Ensure();
             if (GarageSession.Current == null) GarageSession.Boot(m_Stage.CarRig);
             GarageSession.Current.Changed -= OnDataChanged;
@@ -352,15 +355,19 @@ namespace Accertone.Garage
             var brt = (RectTransform)m_BackButton.transform;
             SettingsUI.AtRight(brt, SideMargin, 170f, 232f, 38f);
             m_BackButton.navigation = new Navigation { mode = Navigation.Mode.None };
+            // Mouse buttons outside the navigation chain: hovering them must not strand keyboard / gamepad focus.
+            m_BackButton.selectOnHover = false;
+            // Does what it says from anywhere in the Garage; the panel's BACK and Esc step back one level.
             m_BackButton.onClick = () =>
             {
-                if (m_State == State.Panel) ClosePanel();
-                else RequestBack();
+                if (OnCloseRequested != null) OnCloseRequested();
+                else Close(null);
             };
 
             m_PhotoButton = GarageButton.Create(m_Header, "PHOTO MODE", 176f, OpenPhoto, false, false, GarageEffect.Spec, GarageIconKind.Camera, 38f);
             SettingsUI.AtRight((RectTransform)m_PhotoButton.transform, SideMargin + 232f + 12f, 170f, 176f, 38f);
             m_PhotoButton.navigation = new Navigation { mode = Navigation.Mode.None };
+            m_PhotoButton.selectOnHover = false;
         }
 
         void BuildColumns()
@@ -382,8 +389,6 @@ namespace Accertone.Garage
                 bool right = i >= 4;
                 int row = i % 4;
                 var item = GarageNavItem.Create(columns, i, right, titles[i], icons[i]);
-                float railTop = PanelTop + (1080f - PanelTop - PanelBottomMargin) * 0.5f - (RailGap * 4f - 12f) * 0.5f;
-                item.SetPositions(new Vector2(SideMargin, ColumnTop + row * ItemGap), new Vector2(RailX, railTop + row * RailGap));
                 item.activated = OnItemActivated;
                 item.focusedItem = OnItemFocused;
                 m_Items[i] = item;
@@ -400,6 +405,19 @@ namespace Accertone.Garage
                 nav.selectOnRight = right ? null : m_Items[i + 4];
                 nav.selectOnLeft = right ? m_Items[i - 4] : null;
                 m_Items[i].navigation = nav;
+            }
+        }
+
+        /// <summary>Column and edge-rail positions. The rail centres on the panel, whose height follows the canvas
+        /// (aspect ratio and Interface Scale), so this runs on every open rather than once.</summary>
+        void PlaceItems()
+        {
+            float h = m_Root.rect.height > 1f ? m_Root.rect.height : 1080f;
+            float railTop = PanelTop + Mathf.Max(220f, h - PanelTop - PanelBottomMargin) * 0.5f - (RailGap * 4f - 12f) * 0.5f;
+            for (int i = 0; i < 8; i++)
+            {
+                int row = i % 4;
+                m_Items[i].SetPositions(new Vector2(SideMargin, ColumnTop + row * ItemGap), new Vector2(RailX, railTop + row * RailGap));
             }
         }
 
@@ -974,7 +992,7 @@ namespace Accertone.Garage
                 {
                     m_ShownView = view;
                     m_ShownMode = mode;
-                    m_ViewText.text = "VIEW " + view.ToString("000") + "°  ·  " + (mode == 0 ? "MANUAL" : mode == 1 ? "AUTO SPIN" : "HOLD");
+                    m_ViewText.SetText(s_ViewFormats[mode], view);
                 }
             }
             for (int i = 0; i < m_ViewChips.Count; i++)
@@ -1202,15 +1220,20 @@ namespace Accertone.Garage
         }
     }
     /// <summary>
-    /// While the Garage is open W / A / S / D drive the camera, so they come off the UI "move" action for that time
-    /// (arrows, d-pad and stick still navigate). Without this, turning the car also moved focus and nudged sliders.
+    /// While the Garage is open W / A / S / D and the right stick drive the camera, so they come off the UI "move" action
+    /// for that time (arrows, d-pad and left stick still navigate). Without this, turning the car also moved focus and
+    /// nudged sliders.
     /// </summary>
     static class GarageNavigationKeys
     {
 #if ENABLE_INPUT_SYSTEM
         static InputAction s_Action;
         static readonly List<int> s_Indices = new List<int>();
-        static readonly string[] s_Keys = { "<Keyboard>/w", "<Keyboard>/a", "<Keyboard>/s", "<Keyboard>/d" };
+        static readonly string[] s_Keys =
+        {
+            "<Keyboard>/w", "<Keyboard>/a", "<Keyboard>/s", "<Keyboard>/d",
+            "<Gamepad>/rightStick", "<Gamepad>/rightStick/up", "<Gamepad>/rightStick/down", "<Gamepad>/rightStick/left", "<Gamepad>/rightStick/right",
+        };
 #endif
 
         public static void Suppress()

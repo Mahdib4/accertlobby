@@ -74,7 +74,7 @@ namespace Accertone.Garage
         // Turntable (podium root yaw in degrees, unwrapped).
         float m_Yaw, m_YawVelocity, m_SpinVelocity, m_LastInput = -100f, m_PresentFrom, m_PresentTo, m_PresentStart, m_PresentDuration;
         bool m_Presenting, m_Dragging, m_UserHeld, m_Returning;
-        float m_InputRotate;
+        float m_InputRotate, m_LastDragAt;
 
         // Shot (targets and smoothed values).
         GarageShot m_Shot;
@@ -199,20 +199,25 @@ namespace Accertone.Garage
             m_Returning = false;
             m_OnExited = null;
             StartWeight(1f, 1.65f);
+            // Every entry starts on the hero shot, also one that interrupts the exit of a panel or view close-up.
+            m_Shot = HeroShot();
+            if (!AccertoneMotion.CameraMotion) m_Shot.spin = false;
+            m_ZoomTarget = 1f;
+            m_FrameTarget = 0f;
+            m_UserHeld = false;
             if (wasIdle)
             {
                 m_LobbyFov = m_Camera.fieldOfView;
                 m_Yaw = Mathf.DeltaAngle(0f, m_Podium.localEulerAngles.y);
                 m_YawVelocity = 0f;
                 m_SpinVelocity = 0f;
-                m_Zoom = m_ZoomTarget = 1f;
-                m_UserHeld = false;
-                m_Shot = HeroShot();
+                m_Zoom = 1f;
                 m_ShotInit = false;
                 // Present the car: the platform spins up and lands on the hero three-quarter (nose to screen right, turning
-                // the same way as the display spin), then the slow spin takes over from standstill.
+                // the same way as the display spin), then the slow spin takes over from standstill. A held hero (camera
+                // motion off) lands on its own view so it does not swing round again once the presentation ends.
                 m_PresentFrom = m_Yaw;
-                m_PresentTo = YawForView(-HeroView);
+                m_PresentTo = YawForView(m_Shot.spin ? -HeroView : HeroView);
                 if (m_PresentTo > m_PresentFrom - 25f) m_PresentTo -= 360f * Mathf.Ceil((m_PresentTo - m_PresentFrom + 25f) / 360f);
                 // Sign text alpha as it is now (it is restored to this on exit).
                 foreach (var t in m_StaticTexts) if (t.text != null) t.alpha = t.text.alpha;
@@ -289,7 +294,7 @@ namespace Accertone.Garage
                 case GarageView.Side: return GarageShot.Make(90f, false, 9.6f, 1.0f, new Vector3(0f, 0.55f, 0f), 30f);
                 case GarageView.Rear: return GarageShot.Make(180f, false, 8.2f, 1.25f, new Vector3(0f, 0.62f, -0.6f), 30f);
                 case GarageView.RearThreeQuarter: return GarageShot.Make(145f, false, 9.4f, 1.6f, new Vector3(0f, 0.62f, -0.2f), 30f);
-                case GarageView.Top: return GarageShot.Make(62f, false, 3.6f, 8.6f, new Vector3(0f, 0.4f, 0f), 34f);
+                case GarageView.Top: return GarageShot.Make(62f, false, 2.6f, 6.4f, new Vector3(0f, 0.4f, 0f), 44f);
             }
             var hero = HeroShot();
             hero.spin = false;
@@ -299,6 +304,8 @@ namespace Accertone.Garage
         /// <summary>Moves to a composition. A held shot turns the car to its view; a spinning shot keeps it turning.</summary>
         public void SetShot(GarageShot shot)
         {
+            // Settings > Camera > Showroom camera motion off: the platform holds, it never auto-spins.
+            if (!AccertoneMotion.CameraMotion) shot.spin = false;
             m_Shot = shot;
             m_UserHeld = false;
             if (!shot.spin) m_Presenting = false;
@@ -314,7 +321,9 @@ namespace Accertone.Garage
         {
             m_Dragging = true;
             m_Presenting = false;
-            m_LastInput = Time.unscaledTime;
+            // A grab stops the platform: it does not inherit the presentation, a throw or the display spin.
+            m_YawVelocity = 0f;
+            m_LastInput = m_LastDragAt = Time.unscaledTime;
         }
 
         public void Drag(float pixels)
@@ -324,13 +333,16 @@ namespace Accertone.Garage
             m_Yaw -= delta;
             float dt = Mathf.Max(1e-3f, Time.unscaledDeltaTime);
             m_YawVelocity = Mathf.Lerp(m_YawVelocity, -delta / dt, 0.5f);
-            m_LastInput = Time.unscaledTime;
+            m_LastInput = m_LastDragAt = Time.unscaledTime;
         }
 
         public void EndDrag()
         {
             m_Dragging = false;
             m_UserHeld = true;
+            // Held still before letting go: no throw. A time window, not a per-frame check, because frames can outrun
+            // the mouse's polling while it is still moving.
+            if (Time.unscaledTime - m_LastDragAt > 0.06f) m_YawVelocity = 0f;
             m_LastInput = Time.unscaledTime;
             m_YawVelocity = Mathf.Clamp(m_YawVelocity, -240f, 240f);
         }
@@ -592,6 +604,9 @@ namespace Accertone.Garage
         // =====================================================================================================
         void Update()
         {
+            // Pending saves also complete while the Garage screen is closed (it is not the only place setups change).
+            var session = GarageSession.Current;
+            if (session != null) session.Tick();
             if (!m_Located) return;
             UpdateLift();
         }
@@ -755,6 +770,7 @@ namespace Accertone.Garage
             Vector3 flat = new Vector3(Mathf.Sin(bearing), 0f, Mathf.Cos(bearing));
             Vector3 pos = new Vector3(m_Focus.x, 0f, m_Focus.z) + flat * m_Distance;
             pos.y = Mathf.Max(0.25f, m_Height);
+            if (m_HasRoom) pos.y = Mathf.Min(pos.y, m_Room.max.y);
 
             // Barely-there handheld drift (honours Settings > Camera > Showroom camera motion); none in Photo Mode.
             float pw = SmoothWeight(m_PhotoWeight);

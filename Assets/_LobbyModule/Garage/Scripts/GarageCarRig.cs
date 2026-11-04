@@ -84,6 +84,10 @@ namespace Accertone.Garage
         readonly Dictionary<Material, Material> m_Swap = new Dictionary<Material, Material>();
         readonly List<Renderer> m_Renderers = new List<Renderer>();
         readonly List<PosedNode> m_Body = new List<PosedNode>();
+        /// <summary>A suspension link pinned at the upright: its chassis end follows ride height / rake, so the link
+        /// swings instead of lifting away from the wheel.</summary>
+        class LinkNode { public Transform t; public Vector3 pos, inboard, outboard, inboardRoot; public Quaternion rot; }
+        readonly List<LinkNode> m_Links = new List<LinkNode>();
         readonly List<PosedNode> m_FrontFlaps = new List<PosedNode>();
         readonly List<PosedNode> m_Wheels = new List<PosedNode>();
         PosedNode m_Drs;
@@ -211,14 +215,20 @@ namespace Accertone.Garage
             TrackFront = TrackWidth(true);
             TrackRear = TrackWidth(false);
 
-            // Body: every direct child of the GLTF root except the wheel assemblies takes ride height / rake.
+            // Body: every direct child of the GLTF root except the wheel assemblies takes ride height / rake. Suspension
+            // links (wishbones, pushrods, the rear link groups) bridge body and upright, so they swing instead.
             foreach (Transform c in m_GltfRoot)
             {
                 if (c.name.StartsWith("HUB_")) continue;
+                if (c.name.StartsWith("SUS_WB") || c.name.StartsWith("SUS_ROD")) { AddLink(c); continue; }
+                if (c.name.StartsWith("susp3_") || c.name.StartsWith("susp4_")) { foreach (Transform m in c) AddLink(m); continue; }
                 var node = new PosedNode { t = c, pos = c.localPosition, rot = c.localRotation };
                 m_Body.Add(node);
                 if (c.name.StartsWith("frontflap_")) { node.flap = true; m_FrontFlaps.Add(node); }
             }
+
+            // Track rods hang off the uprights; their inboard end is the steering rack in the body.
+            foreach (var t in m_GltfRoot.GetComponentsInChildren<Transform>(true)) if (t.name.StartsWith("SUS_STEER_")) AddLink(t);
 
             // Front flaps rotate about a lateral axis through their leading edge (forward-most, mid height).
             if (m_FrontFlaps.Count > 0)
@@ -254,6 +264,23 @@ namespace Accertone.Garage
                 };
                 break;
             }
+        }
+
+        void AddLink(Transform t)
+        {
+            Bounds b;
+            if (t.parent == null || !CarLocalBounds(t, out b)) return;
+            // The end nearer the centre line is the chassis pick-up; the outer end sits on the upright.
+            bool positive = b.center.x >= 0f;
+            Vector3 inWorld = transform.TransformPoint(new Vector3(positive ? b.min.x : b.max.x, b.center.y, b.center.z));
+            Vector3 outWorld = transform.TransformPoint(new Vector3(positive ? b.max.x : b.min.x, b.center.y, b.center.z));
+            m_Links.Add(new LinkNode
+            {
+                t = t, pos = t.localPosition, rot = t.localRotation,
+                inboard = t.parent.InverseTransformPoint(inWorld),
+                outboard = t.parent.InverseTransformPoint(outWorld),
+                inboardRoot = m_GltfRoot.InverseTransformPoint(inWorld),
+            });
         }
 
         void AddHeatLight(Transform hub, Vector3 centreCar, bool front, float side)
@@ -610,6 +637,7 @@ namespace Accertone.Garage
             m_CamberFT = m_CamberRT = m_ToeFT = m_ToeRT = 0f;
             SnapVisuals();
             foreach (var n in m_Body) { n.t.localPosition = n.pos; n.t.localRotation = n.rot; }
+            foreach (var k in m_Links) { k.t.localPosition = k.pos; k.t.localRotation = k.rot; }
             foreach (var n in m_Wheels) { n.t.localPosition = n.pos; n.t.localRotation = n.rot; }
             if (m_Drs != null) { m_Drs.t.localPosition = m_Drs.pos; m_Drs.t.localRotation = m_Drs.rot; }
             m_PoseDirty = false;
@@ -676,6 +704,16 @@ namespace Accertone.Garage
                 }
                 n.t.localPosition = pivot + bodyRot * (p - pivot) + lift;
                 n.t.localRotation = bodyRot * r;
+            }
+
+            // Links: keep the upright end, swing the chassis end to where the body pose took its pick-up point.
+            foreach (var k in m_Links)
+            {
+                Vector3 inRoot = pivot + bodyRot * (k.inboardRoot - pivot) + lift;
+                Vector3 inLocal = k.t.parent.InverseTransformPoint(m_GltfRoot.TransformPoint(inRoot));
+                Quaternion swing = Quaternion.FromToRotation(k.inboard - k.outboard, inLocal - k.outboard);
+                k.t.localPosition = k.outboard + swing * (k.pos - k.outboard);
+                k.t.localRotation = swing * k.rot;
             }
 
             if (m_Drs != null)
