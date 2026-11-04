@@ -37,11 +37,14 @@ namespace Accertone.UI
             SetVerticesDirty();
         }
 
+#if UNITY_EDITOR
+        // Graphic.OnValidate only exists in the editor; without the guard player builds fail to compile.
         protected override void OnValidate()
         {
             base.OnValidate();
             m_PathDirty = true;
         }
+#endif
 
         protected override void OnRectTransformDimensionsChange()
         {
